@@ -34,7 +34,9 @@
         (module test_mul ()
             (reg (,WORDSIZE a b))
             (wire (,(l_* WORDSIZE 2) out))
-            (mul out a b)
+            (wire overflow)
+            (wire signed_)
+            (mul out overflow a b signed_)
             (dump "test.vcd")
             (initial
                 (delay 10000 nil)
