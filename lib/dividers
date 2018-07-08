@@ -1,0 +1,25 @@
+(use adders)
+;(adder sum c_out a b c_in)
+
+(defmacro make-divider (name n-bits &optional slice)
+    (let (
+            (n-out-bits (* 2 n-bits))
+        )
+        `(v_module ,name (
+                (output (,n-out-bits out) overflow)
+                (input
+                    (,n-bits a b)
+                    signed_
+                )
+            )
+            (v_comment
+                "
+                    NOT IMPLEMENTED
+                    NOT IMPLEMENTED
+                    NOT IMPLEMENTED
+                "
+            )
+            (v_assign out (v_cat a b))
+        )
+    )
+)

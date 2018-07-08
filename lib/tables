@@ -1,0 +1,87 @@
+(defmacro make-table (name sig table)
+    #|   make a module named name with the specified truth table.
+         (make-table cloud ((output a b c (3 d)) (input e f g h)) ((1 0 1 * 1 0 1 (v_d 3 6)) (0 1 0 1 0 1 * (v_b 3 101))))
+         the rows of the table match "input output".
+         inputs and outputs can be any size.
+         inouts not allowed.
+         uses behavioral "(cond ((&& (== ...) (== ...)) (progn (= a ...) (= b ...))) ((&& (== ...) (== ...)) (progn (= a ...) (= b ...))))"
+    |#
+    (let (
+            (input-names nil)
+            (output-names nil)
+        )
+        (flet (
+                (local_v_&& (x)
+                    (if (> (length x) 1)
+                        `(v_&& ,@x)
+                        (if (eq (length x) 1)
+                            (car x)
+                            'else
+                        )
+                    )
+                )
+            )
+            (foreach input-sig (dict-lookup sig 'input)
+                (setq input-names
+                    (append
+                        input-names
+                        (if (atom input-sig)
+                            (list input-sig)
+                            (cdr input-sig)
+                        )
+                    )
+                )
+            )
+            (foreach output-sig (dict-lookup sig 'output)
+                (setq output-names
+                    (append
+                        output-names
+                        (if (atom output-sig)
+                            (list output-sig)
+                            (cdr output-sig)
+                        )
+                    )
+                )
+            )
+            (let (
+                    (n-inputs (length input-names))
+                    (n-outputs (length output-names))
+                )
+                `(v_module ,name ,sig
+                    (v_reg
+                        ,@(dict-lookup sig 'output)
+                    )
+                    (v_always (,@input-names)
+                        (v_cond
+                            ,@(foreach row table
+                                (let (
+                                        (row-inputs (slice row n-inputs))
+                                        (row-outputs (slice row n-inputs nil))
+                                    )
+                                    `(
+                                        ,(local_v_&&
+                                            (filter #'nonnull
+                                                (foreach** (input-name row-input) (input-names row-inputs)
+                                                    (if (and (not (eq row-input '*)) (not (eq row-input 'v_*)))
+                                                        `(v_== ,input-name ,row-input)
+                                                    )
+                                                )
+                                            )
+                                        )
+                                        ,@(filter #'nonnull
+                                            (foreach** (output-name row-output) (output-names row-outputs)
+                                                (if (not (eq row-output '*))
+                                                    `(v_= ,output-name ,row-output)
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+)

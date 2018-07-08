@@ -1,0 +1,22 @@
+(integer i j)
+(for (i 0) (< i (<< 1 8)) (i (+ i 1))
+    (display i)
+)
+(fromto j 0 (<< 1 8)
+    (display j)
+)
+
+================================================================================
+
+module _$_;
+    integer i;
+    integer j;
+    for (i = 0; (i < (1 << 8)); i = (i + 1))
+    begin
+        $display(i);
+    end
+    for (j = 0; (j < (1 << 8)); j = (j + 1))
+    begin
+        $display(j);
+    end
+endmodule

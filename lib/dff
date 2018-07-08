@@ -1,0 +1,2 @@
+(use ffs)
+(make-ff dff dt)

@@ -1,0 +1,166 @@
+(v_module unit_mux (
+        (output out)
+        (input sel a b)
+    )
+    (expand
+        out
+        (or
+            (and b sel)
+            (and
+                a
+                (not sel)
+            )
+        )
+    )
+)
+
+(defvar *done-mux1s* nil)    ; see regfiles:*done-regs* ; (width name)
+
+(defmacro make-mux (name n-bits &optional (width 1))
+    (let* (
+            (1<<n-bits (1<< n-bits))
+            (inputs
+                (foreach n (range 1<<n-bits)
+                    (symcat 'input n)
+                )
+            )
+        )
+        (labels (
+                (make-mux-code (sels inputs)
+                    (if (cdr sels)
+                        `(unit_mux
+                            ,(car sels)
+                            ,(make-mux-code (cdr sels) (slice inputs (/ (length inputs) 2)))
+                            ,(make-mux-code (cdr sels) (slice inputs (/ (length inputs) 2) nil))
+                        )
+                        `(unit_mux
+                            ,(car sels)
+                            ,@inputs
+                        )
+                    )
+                )
+                (bob-barker (n)
+                    ; find the (width name) in *done-mux1s* whose width is closest to n "without going over!"
+                    (let (
+                            (result '(0 nil))
+                        )
+                        (foreach done-mux *done-mux1s*
+                            (if (and
+                                    (< (car result) (car done-mux))
+                                    (<= (car done-mux) n)
+                                    (not (equal name (cadr done-mux)))
+                                )
+                                (setq result done-mux)
+                            )
+                        )
+                        result
+                    )
+                )
+                (becky (iter accum)
+                    ; return a list of statements sufficient to register iter bits of in
+                    (if (> iter 0)
+                        (let (
+                                (barker (bob-barker iter))
+                            )
+                            (if (> (car barker) 0)
+                                (becky
+                                    (- iter (car barker))
+                                    `(
+                                        ,@accum
+                                        (,(cadr barker)
+                                            (v_ref out ,(- iter 1) ,(- iter (car barker)))
+                                            selectors
+                                            ,@(foreach in inputs
+                                                `(v_ref ,in ,(- iter 1) ,(- iter (car barker)))
+                                            )
+                                        )
+                                    )
+                                )
+                                ; fill out the odd space with unit_muxes
+                                `(
+                                    ,@accum
+                                    ,@(foreach i (range iter)
+                                        `(unit_mux
+                                            (v_ref out ,i)
+                                            selectors
+                                            ,@(foreach in inputs
+                                                `(v_ref ,in ,i)
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                        accum
+                    )
+                )
+            )
+            (if (<= n-bits 1)
+                (if (<= width 1)
+                    (error "use unit_mux")
+                    (progn
+                        (setq *done-mux1s* (cons (list width name) *done-mux1s*))
+                        `(v_module ,name (
+                                ; two busses to one bus
+                                (output (,width out))
+                                (input
+                                    selectors
+                                    (,width ,@inputs)
+                                )
+                            )
+                            ,@(becky width nil)
+                        )
+                    )
+                )
+                (if (<= width 1)
+                    ; many wires to one wire -- aka an n-bit "flat" mux
+                    `(v_module ,name (
+                            (output out)
+                            (input
+                                (,n-bits selectors)
+                                ,@inputs
+                            )
+                        )
+                        (expand 
+                            out
+                            ,(make-mux-code
+                                (foreach sel-n (range (- n-bits 1) -1 -1)
+                                    `(v_ref selectors ,sel-n)
+                                )
+                                inputs
+                            )
+                        )
+                    )
+                    ; many busses to one bus
+                    (let (
+                            (flat-mux (symcat 'flat_ name '_flat))
+                        )
+                        (eval
+                            `(make-mux
+                                ,flat-mux
+                                ,n-bits
+                            )
+                        )
+                        `(v_module ,name (
+                                (output (,width out))
+                                (input
+                                    (,n-bits selectors)
+                                    (,width ,@inputs)
+                                )
+                            )
+                            ,@(loop for n from 0 below width collect
+                                `(,flat-mux
+                                    (v_ref out ,n)
+                                    selectors
+                                    ,@(foreach in inputs
+                                        `(v_ref ,in ,n)
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+)

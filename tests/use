@@ -1,0 +1,68 @@
+(use muxes)
+(use adders)
+(use clock)
+(use dff)
+
+================================================================================
+
+module unit_mux(out, sel, a, b);
+    output out;
+    input sel;
+    input a;
+    input b;
+    /*
+        out (or (and b sel) (and a (not sel))) 
+    */
+    wire anon_0;
+    wire anon_1;
+    or anon_2 (out, anon_0, anon_1);
+    and anon_3 (anon_0, b, sel);
+    wire anon_4;
+    and anon_5 (anon_1, a, anon_4);
+    not anon_6 (anon_4, sel);
+endmodule
+
+module full_adder(sum, c_out, a, b, c_in);
+    output sum;
+    output c_out;
+    input a;
+    input b;
+    input c_in;
+    wire a_xor_b;
+    xor anon_7 (a_xor_b, a, b);
+    xor anon_8 (sum, a_xor_b, c_in);
+    /*
+        c_out (or (and a b) (and c_in a_xor_b)) 
+    */
+    wire anon_9;
+    wire anon_10;
+    or anon_11 (c_out, anon_9, anon_10);
+    and anon_12 (anon_9, a, b);
+    and anon_13 (anon_10, c_in, a_xor_b);
+endmodule
+
+module clock(clk);
+    output clk;
+    initial
+    begin
+        clk = 0;
+    end
+    always
+    begin
+        #1;
+        clk = (!clk);
+    end
+endmodule
+
+module dff(q, clk, d);
+    output q;
+    input clk;
+    input d;
+    wire x;
+    wire y;
+    wire q_bar;
+    nand anon_14 (x, d, clk);
+    nand anon_15 (y, x, clk);
+    nand anon_16 (q, q_bar, x);
+    nand anon_17 (q_bar, q, y);
+endmodule

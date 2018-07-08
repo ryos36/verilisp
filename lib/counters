@@ -1,0 +1,55 @@
+(use ffs)
+
+(make-ff jkff jk)
+
+(defmacro make-counter (name n-bits)
+    `(v_module ,name (
+            (output (,n-bits out))
+            (input in)
+        )
+        (v_supply1 vdd)
+        (v_wire (,n-bits q_bars))
+        (jkff
+            (v_ref out 0)
+            (v_ref q_bars 0)
+            in
+            vdd
+            vdd
+        )
+        ,(if (> n-bits 1)
+            `(jkff
+                (v_ref out 1)
+                (v_ref q_bars 1)
+                in
+                (v_ref out 0)
+                (v_ref out 0)
+            )
+        )
+        ,@(foreach n (range 2 n-bits)
+            (let (
+                    (jk (gen-expand-variable))
+                )
+                `(progn
+                    (v_wire jk)
+                    (expand
+                        jk
+                        (v_and
+                            ,@(foreach i (range (- n 1))
+                                `(v_ref out ,i)
+                            )
+                        )
+                    )
+                    (expand
+                        (v_ref out ,n)
+                        (jkff
+                            (v_ref q_bars ,n)
+                            in
+                            jk
+                            jk
+                        )
+                    )
+                )
+            )
+        )
+    )
+)

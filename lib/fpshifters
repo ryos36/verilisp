@@ -1,0 +1,31 @@
+(use adders)
+
+(defmacro make-fpshifter (name n-bits n-bits-exp &key adder)
+    `(progn
+        (if (not adder)
+            (progn
+                (setq adder (symcat name '_adder_ n-bits-exp))
+                `(make-adder ,adder ,n-bits-exp)
+            )
+        )
+        (v_module ,name (
+                (output (,n-bits out) overflow)
+                (input (,n-bits in) (,n-bits-exp shamt))
+            )
+            (comment
+                "shamt is 2's complement, but fp exp isn't."
+            )
+            (v_buf (v_ref out ,(- n-bits 1)) (v_ref in ,(- n-bits 1)))
+            ; keep the sign bit and the significand
+            ,@(foreach n (range (- n-bits 1 n-bits-exp))
+                `(v_buf (v_ref out ,n) (v_ref in ,n))
+            )
+            (,adder
+                (v_ref out ,(- n-bits 2) ,(- n-bits 2 n-bits-ep))
+                overflow
+                (v_ref in ,(- n-bits 2) ,(- n-bits 2 n-bits-ep))
+                shamt
+            )
+        )
+    )
+)

@@ -1,0 +1,56 @@
+(module test (
+        (output a)
+        (inout (2 b c))
+        (input d e)
+    )
+    (display b c d e)
+)
+(module test2 ()
+    (wire a b0 b1 d_ c0 c1 e)
+    (test
+        a
+        (cat b0 b1)
+        (name d d_)
+        (name c (cat c0 c1))
+        e
+    )
+    (display 2)
+)
+(module clock (
+        (output clk)
+    )
+    (always ()
+        (= clk (! clk))
+    )
+)
+
+================================================================================
+
+module test(a, b, c, d, e);
+    output a;
+    inout [1 : 0] b;
+    inout [1 : 0] c;
+    input d;
+    input e;
+    $display(b, c, d, e);
+endmodule
+
+module test2();
+    wire a;
+    wire b0;
+    wire b1;
+    wire d_;
+    wire c0;
+    wire c1;
+    wire e;
+    test anon_0 (a, {b0, b1}, .d(d_), .c({c0, c1}), e);
+    $display(2);
+endmodule
+
+module clock(clk);
+    output clk;
+    always
+    begin
+        clk = (!clk);
+    end
+endmodule

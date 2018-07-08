@@ -1,0 +1,185 @@
+(include "a.v")
+(define a 1)
+(timescale "1s")
+(bitstoreal)
+(countdrivers)
+(display)
+(displayb)
+(displayh)
+(displayo)
+(dump "a.vcd") ; implies dumpfile, dumpvars
+(dumpall)
+(dumpfile "a.vcd")
+(dumpflush)
+(dumplimit)
+(dumpoff)
+(dumpon)
+(dumpvar a b)
+(dumpvars)
+(fclose)
+(fdisplay)
+(fdisplayb)
+(fdisplayh)
+(fdisplayo)
+(finish)
+(fmonitor)
+(fmonitorb)
+(fmonitorh)
+(fmonitoro)
+(fopen)
+(fstrobe)
+(fstrobeb)
+(fstrobeh)
+(fstrobeo)
+(fwrite)
+(fwriteb)
+(fwriteh)
+(fwriteo)
+(getpattern)
+(hold)
+(incsave)
+(itor)
+(key)
+(list)
+(log)
+(monitor)
+(monitorb)
+(monitorh)
+(monitoro)
+(monitoroff)
+(monitoron)
+(nokey)
+(nolog)
+(period)
+(printtimescale)
+(random)
+(readmemb)
+(readmemh)
+(realtobits)
+(recovery)
+(reset)
+(reset_count)
+(reset_value)
+(restart)
+(rtoi)
+(save)
+(scale)
+(scope)
+(setup)
+(setuphold)
+(showscopes)
+(showvars)
+(skew)
+(sreadmemb)
+(sreadmemh)
+(stop)
+(strobe)
+(strobeb)
+(strobeh)
+(strobeo)
+(timeformat)
+(width)
+(write)
+(writeb)
+(writeh)
+(writeo)
+(display (realtime))
+(display (time))
+(display (stime))
+
+================================================================================
+
+`include "a.v"
+`define a 1
+`timescale 1s
+module _$_;
+    $bitstoreal;
+    $countdrivers;
+    $display;
+    $displayb;
+    $displayh;
+    $displayo;
+    initial
+    begin
+        $dumpfile("a.vcd");
+        $dumpvars;
+    end
+    $dumpall;
+    $dumpfile("a.vcd");
+    $dumpflush;
+    $dumplimit;
+    $dumpoff;
+    $dumpon;
+    $dumpvar(a, b);
+    $dumpvars;
+    $fclose;
+    $fdisplay;
+    $fdisplayb;
+    $fdisplayh;
+    $fdisplayo;
+    $finish;
+    $fmonitor;
+    $fmonitorb;
+    $fmonitorh;
+    $fmonitoro;
+    $fopen;
+    $fstrobe;
+    $fstrobeb;
+    $fstrobeh;
+    $fstrobeo;
+    $fwrite;
+    $fwriteb;
+    $fwriteh;
+    $fwriteo;
+    $getpattern;
+    $hold;
+    $incsave;
+    $itor;
+    $key;
+    $list;
+    $log;
+    $monitor;
+    $monitorb;
+    $monitorh;
+    $monitoro;
+    $monitoroff;
+    $monitoron;
+    $nokey;
+    $nolog;
+    $period;
+    $printtimescale;
+    $random;
+    $readmemb;
+    $readmemh;
+    $realtobits;
+    $recovery;
+    $reset;
+    $reset_count;
+    $reset_value;
+    $restart;
+    $rtoi;
+    $save;
+    $scale;
+    $scope;
+    $setup;
+    $setuphold;
+    $showscopes;
+    $showvars;
+    $skew;
+    $sreadmemb;
+    $sreadmemh;
+    $stop;
+    $strobe;
+    $strobeb;
+    $strobeh;
+    $strobeo;
+    $timeformat;
+    $width;
+    $write;
+    $writeb;
+    $writeh;
+    $writeo;
+    $display($realtime);
+    $display($time);
+    $display($stime);
+endmodule

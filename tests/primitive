@@ -1,0 +1,30 @@
+(primitive dff (
+        (output q)
+        (input clk d)
+    )
+    (initial
+        (= q 0)
+    )
+    (table
+        ((r 0) 0)
+        ((r 1) 1)
+        ((* ?) -)
+    )
+)
+
+================================================================================
+
+primitive dff(q, clk, d);
+    output q;
+    input clk;
+    input d;
+    initial
+    begin
+        q = 0;
+    end
+    table
+        r 0 : 0;
+        r 1 : 1;
+        * ? : -;
+    endtable
+endprimitive

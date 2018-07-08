@@ -1,0 +1,35 @@
+(use adders)
+(defmacro make-negater (name n-bits &key adder)
+    `(progn
+        (if (not adder)
+            (progn
+                (setq adder (symcat name '_adder_ n-bits))
+                `(make-adder ,adder ,n-bits)
+            )
+        )
+        (v_module ,name (
+                (output (,n-bits out) overflow)
+                (input (,n-bits in))
+            )
+            (v_wire (,n-bits in_bar))
+            (gate-busses
+                not
+                (,n-bits in_bar)
+                (,n-bits in)
+            )
+            (v_supply0 gnd)
+            (v_supply1 vdd)
+            (,adder
+                out
+                overflow
+                in_bar
+                (v_cat
+                    ,@(foreach n (range 1 ,n-bits)
+                        'gnd
+                    )
+                    vdd
+                )
+            )
+        )
+    )
+)

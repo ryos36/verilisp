@@ -1,0 +1,44 @@
+(case a
+    (1 (display 1))
+    (2 (display 2))
+    (default (display 0))
+)
+(casex b
+    (1 (display 1))
+    (2 (display 2))
+    (default (display 0))
+)
+(casez c
+    (1 (display 1))
+    (2 (display 2))
+    (default (display 0))
+)
+
+================================================================================
+
+module _$_;
+    case(a)
+        1:
+            $display(1);
+        2:
+            $display(2);
+        default:
+            $display(0);
+    endcase
+    casex(b)
+        1:
+            $display(1);
+        2:
+            $display(2);
+        default:
+            $display(0);
+    endcase
+    casez(c)
+        1:
+            $display(1);
+        2:
+            $display(2);
+        default:
+            $display(0);
+    endcase
+endmodule

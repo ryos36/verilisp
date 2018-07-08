@@ -1,0 +1,142 @@
+(use muxes)
+(use adders)
+; (full_adder sum c_out a b c_in)
+
+(defmacro make-log-adder (name n-in-bits)
+    ; makes a module with sig (output (,n-out-bits out)) (input (,(1<< (- n-out-bits 1)) in))
+    ; where out is a binary number representing the number of "on" wires in in
+    (let* (
+            (n-out-bits (+ 1 (log n-in-bits 2)))
+            (n-tiers (- n-out-bits 2))
+            (carries
+                ; carry bits between tiers
+                (foreach i (range n-tiers)
+                    (symcat 'carry_ i)
+                )
+            )
+            (carries (cons 'in carries))
+            (tier-carries
+                ; sum bits carry within a tier
+                (foreach i (range n-tiers)
+                    (symcat 'tier_carry_ i)
+                )
+            )
+        )
+        `(v_module ,name (
+                (output (,n-out-bits out))
+                (input (,n-in-bits in))
+            )
+            (v_wire
+                ,@(foreach i (range n-tiers)
+                    (list
+                        (/ n-in-bits (1<< (+ i 1)))
+                        (nth i tier-carries)
+                    )
+                )
+                ,@(foreach i (range n-tiers)
+                    (list
+                        (+ (/ n-in-bits (1<< (+ i 1))) 1)
+                        (nth (+ i 1) carries)
+                    )
+                )
+            )
+            (v_supply0 gnd)
+            ,@(foreach i (range n-tiers)
+                ; tier of (1<< (- n-tiers i)) adders
+                `(progn
+                    (full_adder
+                        ; top of each tier
+                        (v_ref ,(nth i tier-carries) 0)
+                        (v_ref ,(nth (+ i 1) carries) 0)
+                        
+                        (v_ref ,(nth i carries) 0)
+                        (v_ref ,(nth i carries) 1)
+                        gnd
+                    )
+                    ,@(foreach j (range 1 (- (1<< (- n-tiers i)) 1))
+                        `(full_adder
+                            (v_ref ,(nth i tier-carries) ,j)
+                            (v_ref ,(nth (+ i 1) carries) ,j)
+                            
+                            (v_ref ,(nth i carries) ,(* 2 j))
+                            (v_ref ,(nth i carries) ,(+ (* 2 j) 1))
+                            (v_ref ,(nth i tier-carries) ,(- j 1))
+                        )
+                    )
+                    (full_adder
+                        ; bottom of each tier
+                        (v_ref out ,i)
+                        (v_ref
+                            ,(nth (+ i 1) carries)
+                            ,(- (1<< (- n-tiers i)) 1)
+                        )
+                        
+                        (v_ref
+                            ,(nth i carries)
+                            ,(- (1<< (- n-out-bits i 1)) 2)
+                        )
+                        (v_ref
+                            ,(nth i carries)
+                            ,(- (1<< (- n-out-bits i 1)) 1)
+                        )
+                        (v_ref
+                            ,(nth i tier-carries)
+                            ,(- (1<< (- n-tiers i)) 2)
+                        )
+                    )
+                )
+            )
+            (full_adder
+                ; and a cherry on top
+                (v_ref out ,(- n-out-bits 2))
+                (v_ref out ,(- n-out-bits 1))
+                
+                (v_ref ,(nth n-tiers carries) 0)
+                (v_ref ,(nth n-tiers carries) 1)
+                gnd
+            )
+        )
+    )
+)
+
+(defmacro make-cloer (name n-bits &key log-adder)
+    (let* (
+            (lg-n-bits (log n-bits 2))
+            (lg-n-bits+1 (+ 1 lg-n-bits))
+        )
+        (if (not log-adder)
+            (progn
+                (setq log-adder (symcat name '_log_adder))
+                (eval `(make-log-adder ,log-adder ,n-bits))
+            )
+        )
+        `(v_module ,name (
+                (output (,n-bits out))
+                (input (,n-bits in))
+            )
+            (v_wire (,n-bits masked))
+            (v_supply0 gnd)
+            (v_buf
+                (v_ref masked ,(- n-bits 1))
+                (v_ref in ,(- n-bits 1))
+            )
+            ,@(foreach i (range (- n-bits 2) -1 -1)
+                `(v_and
+                    (v_ref masked ,i)
+                    (v_ref masked ,(+ i 1))
+                    (v_ref in ,i)
+                )
+            )
+            ,@(foreach i (range (- n-bits 1) lg-n-bits -1)
+                `(v_buf
+                    (v_ref out ,i)
+                    gnd
+                )
+            )
+            (,log-adder
+                (v_ref out ,lg-n-bits 0)
+                masked
+            )
+        )
+    )
+)

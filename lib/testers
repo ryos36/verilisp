@@ -1,0 +1,94 @@
+(defmacro make-tester (tester victim dump-file-name outs-sig ins-sig &key monitor delay condition message (random t))
+    (let (
+            (dump-file-name (eval dump-file-name))
+            (n-outs 0)
+            (n-ins 0)
+            (vic-outs nil)
+            (vic-ins nil)
+        )
+        (foreach out-part outs-sig
+            (if (atom out-part)
+                ; non-bus
+                (foreach n (range out-part)
+                    (setq vic-outs
+                        (append
+                            vic-outs
+                            (list `(v_ref outs ,n-outs))
+                        )
+                    )
+                    (setq n-outs (+ n-outs 1))
+                )
+                (foreach out-part-part (cdr out-part)
+                    (foreach n (range out-part-part)
+                        (setq vic-outs
+                            (append vic-outs
+                                (list
+                                    `(v_ref outs
+                                        ,(+ n-outs (car out-part))
+                                        ,n-outs
+                                    )
+                                )
+                            )
+                        )
+                        (setq n-outs
+                            (+ n-outs (car out-part))
+                        )
+                    )
+                )
+            )
+        )
+        (foreach in-part ins-sig
+            (if (atom in-part)
+                ; non-bus
+                (foreach n (range in-part)
+                    (setq vic-ins
+                        (append
+                            vic-ins
+                            (list `(v_ref outs ,n-ins))
+                        )
+                    )
+                    (setq n-ins (+ n-ins 1))
+                )
+                (foreach in-part-part (cdr in-part)
+                    (foreach n (range in-part-part)
+                        (setq vic-ins
+                            (append vic-ins
+                                (list
+                                    `(v_ref outs
+                                        ,(+ n-ins (car in-part))
+                                        ,n-ins
+                                    )
+                                )
+                            )
+                        )
+                        (setq n-ins
+                            (+ n-ins (car in-part))
+                        )
+                    )
+                )
+            )
+        )
+        `(v_module ,tester ()
+            (v_reg (,n-ins ins))
+            (v_wire (,n-outs outs))
+            (v_integer counter)
+            (victim 
+                ,@vic-outs
+                ,@vic-ins
+            )
+            (v_initial
+                (v_dump ,dump-file-name)
+                (v_fromto counter 0 ,(1<< n-ins)
+                    (v_delay 1 nil)
+                    (= ins
+                        (+ ins 1)
+                    )
+                )
+                (v_finish)
+            )
+        )
+    )
+)
+(defun make-testerf (tester victim dfn no ni &key monitor delay)
+    (eval `(make-tester ,tester ,victim ,dfn ,no ,ni :monitor ,monitor :delay ,delay))
+)

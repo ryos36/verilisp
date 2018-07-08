@@ -1,0 +1,239 @@
+(use ffs)
+(use muxes)
+(use decoders)
+
+(defvar *unit-dffe* nil)
+
+(defvar *done-regs* nil)    ; list of 2-lists (size name), where name is the reg name of size size
+(defvar *done-resettable-regs* nil)    ; like *done-regs*, but for resettable regs
+
+(defmacro make-zero-reg (name word-size)
+    `(v_module ,name (
+            (output (,word-size out))
+        )
+        (v_supply0 (,word-size out))
+    )
+)
+
+(defmacro make-reg (name word-size &key dffe resettable)
+    (if dffe
+        (setq *unit-dffe* dffe)
+        (if *unit-dffe*
+            (setq dffe *unit-dffe*)
+            (progn
+                (setq dffe 'unit_dffe)
+                (setq *unit-dffe* dffe)
+                (eval `(make-dffe ,(symcat dffe '_unenabled) :enable ,dffe))
+            )
+        )
+    )
+    (if resettable
+        (progn
+            (setq *done-resettable-regs* (cons (list word-size name) *done-resettable-regs*))
+            (setq resettable
+                `(
+                    (v_supply0 (,word-size gnd))
+                    (v_wire reset_wren (,word-size reset_in))
+                    (,resettable
+                        reset_in
+                        reset
+                        in
+                        gnd
+                    )
+                    (v_or
+                        reset_wren
+                        reset
+                        write_enable
+                    )
+                )
+            )
+        )
+        (setq *done-regs* (cons (list word-size name) *done-regs*))
+    )
+    (let (
+            (reg-in
+                (if resettable
+                    'reset_in
+                    'in
+                )
+            )
+            (wren
+                (if resettable
+                    'reset_wren
+                    'write_enable
+                )
+            )
+        )
+        (labels (
+                (bob-barker (n)
+                    ; find the (size name) in *done-regs* whose size is closest to n "without going over!"
+                    (let (
+                            (result '(0 nil))
+                        )
+                        (foreach done-reg (if resettable *done-resettable-regs* *done-regs*)
+                            (if (and
+                                    (< (car result) (car done-reg))
+                                    (<= (car done-reg) n)
+                                    (not (equal (cadr done-reg) name))
+                                )
+                                (setq result done-reg)
+                            )
+                        )
+                        result
+                    )
+                )
+                (becky (iter accum)
+                    ; return a list of statements sufficient to register iter bits of in
+                    (if (> iter 0)
+                        (let (
+                                (barker (bob-barker iter))
+                            )
+                            (if (> (car barker) 0)
+                                (becky
+                                    (- iter (car barker))
+                                    `(
+                                        ,@accum
+                                        (,(cadr barker)
+                                            (v_ref out ,(- iter 1) ,(- iter (car barker)))
+                                            (v_ref ,reg-in ,(- iter 1) ,(- iter (car barker)))
+                                            ,wren
+                                            clk
+                                            ,@(if resettable
+                                                '(reset)
+                                            )
+                                        )
+                                    )
+                                )
+                                ; fill out the odd space with dffes
+                                `(
+                                    ,@accum
+                                    ,@(foreach i (range iter)
+                                        `(,dffe
+                                            (v_ref out ,i)
+                                            ,wren
+                                            clk
+                                            (v_ref ,reg-in ,i)
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                        accum
+                    )
+                )
+            )
+            `(v_module ,name (
+                    (output (,word-size out))
+                    (input (,word-size in) write_enable clk
+                        ,@(if resettable
+                            '(reset)
+                        )
+                    )
+                )
+                ,@resettable
+                ,@(becky word-size nil)
+            )
+        )
+    )
+)
+
+(defmacro make-regfile (name word-size &key address-size n-readers reg dffe decoder mux zero-reg resettable)
+    #|  word-size is the size of each register.
+        (1<< address-size) is the number of registers.
+        n-readers is the number of registers you can read at once.
+        
+        you can only write 1 register at once.
+        
+        the resulting module signature is
+        (name (word-size out_0 out_1 {out_2 ...}) (address-size addr_0 addr_1 {addr_2 ...} addr_w) (word-size data_w) write_enable clock)
+    |#
+    (if (not address-size)
+        (setq address-size (log word-size 2))
+    )
+    (if (not n-readers)
+        (setq n-readers 2)
+    )
+    (let* (
+            (1<<address-size (1<< address-size))
+            (reg-numbers (range 1<<address-size))
+            (register-outs
+                (foreach i reg-numbers
+                    (symcat 'register_ i '_out)
+                )
+            )
+            (reader-outs
+                (foreach i (range n-readers)
+                    (symcat 'out_ i)
+                )
+            )
+            (reader-addrs
+                (foreach i (range n-readers)
+                    (symcat 'addr_ i)
+                )
+            )
+        )
+        (if (not decoder)
+            (progn
+                (setq decoder (symcat name '_decoder_ address-size))
+                (eval `(make-dec ,decoder ,address-size t))
+            )
+        )
+        (if (not zero-reg)
+            (progn
+                (setq zero-reg (symcat name '_zero_reg_ word-size))
+                (eval `(make-zero-reg ,zero-reg ,word-size))
+            )
+        )
+        (if (not reg)
+            (progn
+                (setq reg (symcat name '_reg_ word-size))
+                (eval `(make-reg ,reg ,word-size :dffe ,dffe))
+            )
+        )
+        (if (not mux)
+            (progn
+                (setq mux (symcat name '_mux_ address-size))
+                (eval `(make-mux ,mux ,address-size ,word-size))
+            )
+        )
+        `(v_module ,name (
+                (output (,word-size ,@reader-outs))
+                (input
+                    (,address-size ,@reader-addrs address_w)
+                    (,word-size data_w)
+                    write_enable
+                    clk
+                    ,@(if resettable
+                        '(reset)
+                    )
+                )
+            )
+            (v_wire
+                (,word-size
+                    ,@register-outs
+                )
+            )
+            (v_wire (,1<<address-size decoded_address_w))
+            (,decoder decoded_address_w address_w write_enable)
+            (,zero-reg register_0_out)
+            ,@(foreach i (cdr reg-numbers)
+                `(,reg
+                    ,(nth i register-outs)
+                    data_w
+                    (v_ref decoded_address_w ,i)
+                    clk
+                    ,@(if resettable
+                        '(reset)
+                    )
+                )
+            )
+            ,@(foreach i (range n-readers)
+                `(,mux
+                    ,(nth i reader-outs)
+                    ,(nth i reader-addrs)
+                    ,@register-outs
+                )
+            )
+        )
+    )
+)

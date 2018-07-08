@@ -1,0 +1,41 @@
+(defmacro make-dec (name n-bits &optional enable)
+    (let (
+            (n-out-bits (1<< n-bits))
+        )
+        `(v_module ,name (
+                (output (,n-out-bits out))
+                (input
+                    ,@(if enable
+                        `(
+                            (,n-bits in)
+                            enable
+                        )
+                        `(
+                            (,n-bits in)
+                        )
+                    )
+                )
+            )
+            (v_wire (,n-bits in_bar))
+            ,@(foreach n (range n-bits)
+                `(v_not (v_ref in_bar ,n) (v_ref in ,n))
+            )
+            ,@(foreach n (range n-out-bits)
+                `(v_and
+                    (v_ref out ,n)
+                    ,@(append
+                        (if enable
+                            '(enable)
+                        )
+                        (foreach i (range (- n-bits 1) -1 -1)
+                            (if (< 0 (boole boole-and (1<< i) n))
+                                `(v_ref in ,i)
+                                `(v_ref in_bar ,i)
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+)

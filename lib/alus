@@ -1,0 +1,308 @@
+(use muxes)
+(use adders)
+(use multipliers)
+(use dividers)
+(use cloers)
+(use shifters)
+
+(defmacro make-alu (name n-bits &key addsuber multer divider shifter mux-n slice cloer)
+    #|
+        sig:
+            (output
+                (,n-bits out)
+                zero
+                overflow
+                c_out
+                (,n-bits hi lo)
+                hilo_wren
+            )
+            (input
+                (,n-bits a b)
+                (6 op)
+            )
+        op:
+            and    000000
+            or     000001
+            xor    000010
+            nor    000011
+            
+            add    100000
+            addu   110000
+            sub    100001
+            subu   110001
+            
+            slt    100011
+            sltu   110011
+            
+            mult   101000
+            multu  111000
+            div    101001
+            divu   111001
+            
+            clo    111010
+            clz    111011
+            
+            sll    111100
+            srl    111101
+            sra    111111
+    |#
+    (let (
+            (lg-n-bits (log n-bits 2))
+        )
+        (if (null addsuber)
+            (progn
+                (setq addsuber (symcat name '_addsub_ n-bits))
+                (eval `(make-csaddsuber ,addsuber ,n-bits))
+            )
+        )
+        (if (null multer)
+            (progn
+                (setq multer (symcat name '_mul_ n-bits))
+                (eval `(make-multiplier ,multer ,n-bits))
+            )
+        )
+        (if (null divider)
+            (progn
+                (setq divider (symcat name '_div_ n-bits))
+                (eval `(make-divider ,divider ,n-bits))
+            )
+        )
+        (if (null shifter)
+            (progn
+                (setq shifter (symcat name '_shift_ n-bits))
+                (eval `(make-shifter ,shifter ,n-bits))
+            )
+        )
+        (if (null mux-n)
+            (progn
+                (setq mux-n (symcat name '_mux_ n-bits))
+                (eval `(make-mux ,mux-n 1 ,n-bits))
+            )
+        )
+        (if (null cloer)
+            (progn
+                (setq cloer (symcat name '_cloer_ n-bits))
+                (eval `(make-cloer ,cloer ,n-bits))
+            )
+        )
+        (if (null slice)
+            (progn
+                (setq slice (symcat name '_slice))
+                (eval
+                    `(v_module ,slice (
+                            (output
+                                out
+                            )
+                            (input
+                                a b
+                                (2 op)
+                            )
+                        )
+                        (v_comment
+                            "
+                                op  meaning
+                                00 a & b
+                                01 a | b
+                                10 a ^ b
+                                11 ~(a | b)
+                            "
+                        )
+                        (expand
+                            out
+                            (unit_mux
+                                (v_ref op 1)
+                                (unit_mux
+                                    (v_ref op 0)
+                                    (and a b)
+                                    (or a b)
+                                )
+                                (unit_mux
+                                    (v_ref op 0)
+                                    (xor a b)
+                                    (nor a b)
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+        `(v_module ,name (
+                (output
+                    (,n-bits out)
+                    zero
+                    overflow
+                    c_out
+                    (,n-bits hi lo)
+                    hilo_wren
+                )
+                (input
+                    (,n-bits a b)
+                    (6 op)
+                )
+            )
+            (v_wire
+                signed_
+                do_subtract
+                do_slt
+                do_slice	; and, or, xor, nor
+                do_shift
+                do_div
+                do_cl		; clo, clz
+                addsub_overflow
+                mult_overflow
+                div_overflow
+                (,n-bits
+                    addsub_out
+                    slice_out
+                    shifts_out
+                    mult_hi_out
+                    mult_lo_out
+                    div_hi_out
+                    div_lo_out
+                    a_bar
+                    clo_in
+                    cl_out
+                    almost_out_0
+                    almost_out_1
+                    almost_out_2
+                )
+            )
+            
+            (expand
+                signed_
+                (not (v_ref op 4))
+            )
+            (expand
+                do_subtract
+                ; sub, subu, slt, sltu
+                (and
+                    (v_ref op 0)
+                    (not (v_ref op 2))
+                    (not (v_ref op 3))
+                    (v_ref op 5)
+                )
+            )
+            (expand
+                do_slt
+                (and
+                    do_subtract
+                    (v_ref op 1)
+                )
+            )
+            (expand
+                do_cl
+                (and
+                    (v_ref op 1)
+                    (not (v_ref op 2))
+                    (v_ref op 3)
+                    (v_ref op 4)
+                    (v_ref op 5)
+                )
+            )
+            
+            (,multer (v_cat mult_hi_out mult_lo_out) mult_overflow a b signed_)
+            (,divider (v_cat div_hi_out div_lo_out) div_overflow a b signed_)
+            (,mux-n
+                hi
+                (v_ref op 0)
+                div_hi_out
+                mult_hi_out
+            )
+            (,mux-n
+                lo
+                (v_ref op 0)
+                div_lo_out
+                mult_lo_out
+            )
+            (expand
+                hilo_wren
+                (and
+                    (v_ref op 5)
+                    (v_ref op 3)
+                    (not (v_ref op 2))
+                    (not (v_ref op 1))
+                )
+            )
+            
+            (,mux-n
+                clo_in
+                (v_ref op 0)
+                a
+                a_bar	; clz
+            )
+            
+            (gate-busses v_not (,n-bits a_bar) (,n-bits a))
+            
+            (gate-busses ,slice (,n-bits slice_out) (,n-bits a) (,n-bits b) (v_ref op 1 0))
+            (,cloer cl_out clo_in)
+            (,addsuber addsub_out addsub_overflow a b do_subtract)
+            
+            (,shifter
+                shifts_out
+                a
+                (v_ref b ,(- (log n-bits 2) 1) 0)
+                (v_ref op 2 1)
+                (v_ref op 0)
+            )
+            
+            (,mux-n
+                out
+                do_slt
+                almost_out_0
+                (v_cat
+                    (v_b
+                        ,(- n-bits 1)
+                        0
+                    )
+                    (v_ref addsub_out ,(- n-bits 1))
+                )
+            )
+            
+            ; choose between addsub_out, cl_out, slice_out, shifts_out using op
+            
+            (,mux-n
+                almost_out_0
+                (v_ref op 3)
+                almost_out_2
+                almost_out_1
+            )
+            
+            (,mux-n
+                almost_out_1
+                (v_ref op 2)
+                cl_out
+                shifts_out
+            )
+            
+            (,mux-n
+                almost_out_2
+                (v_ref op 5)
+                slice_out
+                addsub_out
+            )
+            
+            (expand
+                overflow
+                (and
+                    signed_
+                    (unit_mux
+                        (v_ref op 3)
+                        addsub_overflow
+                        (unit_mux
+                           (v_ref op 0)
+                           div_overflow
+                           mult_overflow
+                        )
+                    )
+                )
+            )
+            
+            (v_nor zero
+                ,@(foreach n (range n-bits)
+                    `(v_ref out ,n)
+                )
+            )
+        )
+    )
+)

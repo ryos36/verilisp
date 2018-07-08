@@ -1,0 +1,19 @@
+(defmacro make-sign-extender (name n-in-bits n-out-bits)
+    `(v_module ,name (
+            (output (,n-out-bits out))
+            (input (,n-in-bits in))
+        )
+        ,@(foreach n (range n-in-bits)
+            `(v_buf
+                (v_ref out ,n)
+                (v_ref in ,n)
+            )
+        )
+        ,@(foreach n (range (- n-out-bits n-in-bits))
+            `(v_buf
+                (v_ref out ,(+ n-in-bits n))
+                (v_ref in ,(- n-in-bits 1))
+            )
+        )
+    )
+)

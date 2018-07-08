@@ -1,0 +1,164 @@
+(use muxes)
+
+(defmacro make-dffe (name &key auto enable)
+    `(make-ff ,name nil :auto ,auto :enable ,enable)
+)
+(defmacro make-ff (name type &key auto enable)
+    (let (
+            (auto-inputs
+                (if (contains '(jk sr) type)
+                    '(j k)
+                    '(d)
+                )
+            )
+        )
+        (eval
+            (cond 
+                ((eq type 'p)
+                    `(v_primitive ,name (
+                            (output q)
+                            (input clk d)
+                        )
+                        (v_initial
+                            (v_= q 0)
+                        )
+                        (v_table
+                            ((r 0) 0)
+                            ((r 1) 1)
+                            ((* ?) -)
+                        )
+                    )
+                )
+                ((eq type 'dt)
+                    `(v_module ,name (
+                            (output q)
+                            (input clk d)
+                        )
+                        (v_wire x y q_bar)
+                        (v_nand x d clk)
+                        (v_nand y x clk)
+                        (v_nand q q_bar x)
+                        (v_nand q_bar q y)
+                    )
+                )
+                ((eq type 'd)
+                    `(v_module ,name (
+                            (output q)
+                            (input clk d)
+                        )
+                        (v_wire clk_bar clk_bar_bar x0 x1 q_bar x2 x3 _q _q_bar)
+                        (v_nand x0 d clk_bar)
+                        (v_nand x1 x0 clk_bar)
+                        (v_nand _q _q_bar x0)
+                        (v_nand _q_bar _q x1)
+                        (v_nand x2 _q clk_bar_bar)
+                        (v_nand x3 x2 clk_bar_bar)
+                        (v_nand q_bar q x3)
+                        (v_nand q q_bar x2)
+                    )
+                )
+                ((eq type 'sr)
+                    `(v_module ,name (
+                            (output q)
+                            (input clk s r)
+                        )
+                        (v_wire a b q_bar)
+                        (v_nand a s clk)
+                        (v_nand b r clk)
+                        (v_nand q_bar b q)
+                        (v_nand q a q_bar)
+                    )
+                )
+                ((eq type 'jk)
+                    `(v_module ,name (
+                            (output q)
+                            (input clk j k)
+                        )
+                        (v_wire clk_bar x0 x1 x2 x3 x4 x5 q_bar)
+                        (v_not clk_bar clk)
+                        (v_nand x0 clk j q_bar)
+                        (v_nand x1 clk k q)
+                        (v_nand x2 x0 x3)
+                        (v_nand x3 x1 x2)
+                        (v_nand x4 x2 clk_bar)
+                        (v_nand x5 x3 clk_bar)
+                        (v_nand q_bar q x5)
+                        (v_nand q q_bar x4)
+                    )
+                )
+                (t
+                    `(v_module ,name (
+                            (output q)
+                            (input clk d)
+                        )
+                        (v_reg q)
+                        (v_always (
+                                (posedge clk)
+                            )
+                            (v_= q d)
+                        )
+                    )
+                )
+            )
+        )
+        (eval
+            (cond
+                ((and auto enable)
+                    (if (null (ignore-errors *exists-unit-clock*))
+                        (eval `(use unit_clock))
+                    )
+                    `(v_module ,auto (
+                            (output q)
+                            (input enable ,@auto-inputs)
+                        )
+                        (v_wire clk mux_out)
+                        (unit_clock clk)
+                        (expand
+                            q
+                            (,name
+                                clk
+                                ,@(foreach in auto-inputs
+                                    `(unit_mux enable q ,in)
+                                )
+                            )
+                        )
+                    )
+                )
+                ((and auto (not enable))
+                    (if (null (ignore-errors *exists-unit-clock*))
+                        (eval `(use unit_clock))
+                    )
+                    `(v_module ,auto (
+                            (output q)
+                            (input ,@auto-inputs)
+                        )
+                        (v_wire clk)
+                        (unit_clock clk)
+                        (,name q clk ,@auto-inputs)
+                    )
+                )
+                ((and (not auto) enable)
+                    `(v_module ,enable (
+                            (output q)
+                            (input enable clk ,@auto-inputs)
+                        )
+                        (expand
+                            q
+                            (,name
+                                clk
+                                ,@(foreach in auto-inputs
+                                    `(unit_mux enable q ,in)
+                                )
+                            )
+                        )
+                    )
+                )
+                ((and (not auto) (not enable))
+                    nil
+                )
+                (t `(comment omgz wtf happened?))
+            )
+        )
+        nil
+    )
+)

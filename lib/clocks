@@ -1,0 +1,14 @@
+(defmacro make-clock (name &optional (clock-time 1))
+    `(v_module ,name (
+            (output clk)
+        )
+        (v_reg clk)
+        (v_initial
+            (v_= clk 0)
+        )
+        (v_always ()
+            (v_delay ,clock-time nil)
+            (v_= clk (v_! clk))
+        )
+    )
+)

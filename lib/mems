@@ -1,0 +1,110 @@
+(defmacro make-mem (name word-size input-file
+        &key n-words (input-format 'b) (buf-delay 100) addr-size writable debug-on-write debug (orientation 'word)
+    )
+    (if (not addr-size)
+        (setq addr-size word-size)
+    )
+    (if (not n-words)
+        ; by default, allow for as much space as possible
+        (setq n-words (1<< addr-size))
+    )
+    `(v_module ,name (
+            (output (,word-size out))
+            (input
+                (,addr-size addr)
+                ,@(if writable
+                    `(
+                        (,word-size wr_data)
+                        wr_enable
+                        clk
+                    )
+                )
+            )
+        )
+        (v_reg
+            (,word-size temp)
+            (,(if (equal orientation 'byte) 8 word-size)
+                (,n-words
+                    data
+                )
+            )
+        )
+        ,@(foreach i (range word-size)
+            `(v_buf
+                ,buf-delay
+                (v_ref out ,i)
+                (v_ref temp ,i)
+            )
+        )
+        (v_always (addr)
+            (v_= temp
+                ,(if (equal orientation 'byte)
+                    `(v_cat
+                        ,@(foreach i (range (/ word-size 8))
+                            `(v_ref data (v_+ addr ,i))
+                        )
+                    )
+                    `(v_ref data addr)
+                )
+            )
+        )
+        ,(if writable
+            `(v_always (
+                    (negedge clk)
+                )
+                ,(if debug
+                    `(v_display
+                        "time:%d; addr=%d; wr_data=%x; wren=%b"
+                        (v_time)
+                        addr
+                        wr_data
+                        wr_enable
+                    )
+                )
+                (v_if wr_enable
+                    (progn
+                        ,(if debug-on-write
+                            `(v_display
+                                "time:%d; mem[%d] = %d;"
+                                (v_time)
+                                addr
+                                wr_data
+                            )
+                        )
+                        ,(if (equal orientation 'byte)
+                            `(progn
+                                ,@(foreach i (range (/ word-size 8))
+                                    `(v_=
+                                        (v_ref data (v_+ addr ,i))
+                                        (v_ref wr_data
+                                            ,(- addr-size 1 (* i 8))
+                                            ,(-
+                                                addr-size
+                                                (* (+ i 1) 8)
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                            `(v_=
+                                (v_ref data addr)
+                                wr_data
+                            )
+                        )
+                    )
+                )
+            )
+        )
+        ,(if input-file
+            `(v_initial
+                (,(if (eq input-format 'h)
+                        'v_readmemh
+                        'v_readmemb
+                    )
+                    ,input-file
+                    data
+                )
+            )
+        )
+    )
+)

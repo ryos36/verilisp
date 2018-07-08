@@ -1,0 +1,43 @@
+(function (1 2) myfunc (a (2 b c) d)
+    (assign (cat a b) (cat c d))
+)
+(function myfunc (a (2 b c) d)
+    (assign (cat a b) (cat c d))
+)
+
+(task myfunc (
+        (output a b)
+        (input c d)
+    )
+    (assign (cat a b) (cat c d))
+)
+
+================================================================================
+
+function [1 : 2] myfunc;
+    input a;
+    input [1 : 0] b;
+    input [1 : 0] c;
+    input d;
+begin
+    assign {a, b} = {c, d};
+end
+endfunction
+function myfunc;
+    input a;
+    input [1 : 0] b;
+    input [1 : 0] c;
+    input d;
+begin
+    assign {a, b} = {c, d};
+end
+endfunction
+task myfunc;
+    output a;
+    output b;
+    input c;
+    input d;
+begin
+    assign {a, b} = {c, d};
+end
+endtask

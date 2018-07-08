@@ -1,0 +1,30 @@
+(wire out in1 in2)
+(expand
+    out
+    (or
+        (and in1 (not in2))
+        (and in2 (not in1))
+    )
+)
+
+;;; i strongly encourage you to replace the generated wire and module names with more descriptive names.
+
+================================================================================
+
+module _$_;
+    wire out;
+    wire in1;
+    wire in2;
+    /*
+        out (v_or (v_and in1 (v_not in2)) (v_and in2 (v_not in1))) 
+    */
+    wire anon_0;
+    wire anon_1;
+    or anon_2 (out, anon_0, anon_1);
+    wire anon_3;
+    and anon_4 (anon_0, in1, anon_3);
+    not anon_5 (anon_3, in2);
+    wire anon_6;
+    and anon_7 (anon_1, in2, anon_6);
+    not anon_8 (anon_6, in1);
+endmodule

@@ -1,0 +1,327 @@
+(use muxes)
+
+(defvar *funky-mux* nil)
+
+(defmacro make-shifter (name wordsize)
+    ; logical, arithmetic, and circular shifter in ONE!1
+    (if (null *funky-mux*)
+        (progn
+            (setq *funky-mux* (symcat name '_funky_mux))
+            (eval
+                `(v_module ,*funky-mux* (
+                        (output out)
+                        (input
+                            do_circular
+                            do_arithmetic
+                            do_logical
+                            direction
+                            sh_bit
+                            in_bit
+                            sll
+                            slr
+                            sal
+                            sar
+                            scl
+                            scr
+                        )
+                    )
+                    (expand
+                        out
+                        (unit_mux
+                            sh_bit
+                            in_bit
+                            (unit_mux
+                                do_circular
+                                (unit_mux
+                                    do_arithmetic
+                                    (unit_mux
+                                        direction
+                                        sal
+                                        sar
+                                    )
+                                    (unit_mux
+                                        direction
+                                        sll
+                                        slr
+                                    )
+                                )
+                                (unit_mux
+                                    direction
+                                    scl
+                                    scr
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+    (let (
+            (lg-wordsize (log wordsize 2))
+            (last-bus-s-n 'in)
+        )
+        `(v_module ,name (
+                (output (,wordsize out))
+                (input
+                    (,wordsize in)
+                    (,lg-wordsize shamt)
+                    (2 op) ; [00, 01, 10, 11] = [circular, arithmetic, logical, circular]
+                    direction ; [0, 1] = [left, right]
+                )
+            )
+            (v_wire do_arithmetic do_circular do_logical)
+            (v_wire (2 op_bar))
+            (gate-busses not (2 op_bar) (2 op))
+            (v_xnor do_circular (v_ref op 1) (v_ref op 0))
+            (v_and do_arithmetic (v_ref op_bar 1) (v_ref op 0))
+            (v_and do_logical (v_ref op 1) (v_ref op_bar 0))
+            
+            ,@(foreach s-n (range lg-wordsize)
+                (let* (
+                        (bus-s-n
+                            (if (=
+                                    s-n
+                                    (- lg-wordsize 1)
+                                )
+                                'out
+                                (read-from-string
+                                    (strcat
+                                        "in_"
+                                        (write-to-string s-n)
+                                    )
+                                )
+                            )
+                        )
+                        (mux-bus
+                            `(progn
+                                (v_wire
+                                    (,wordsize
+                                        ,bus-s-n
+                                    )
+                                )
+                                ,@(foreach n (range wordsize)
+                                    `(,*funky-mux*
+                                        (v_ref ,bus-s-n ,n)
+                                        do_circular
+                                        do_arithmetic
+                                        do_logical
+                                        direction
+                                        (v_ref shamt ,s-n)
+                                        (v_ref ,last-bus-s-n ,n)
+                                        ;sll
+                                        ,(if (< n (1<< s-n))
+                                            'gnd
+                                            `(v_ref ,last-bus-s-n ,(- n (1<< s-n)))
+                                        )
+                                        ;slr
+                                        ,(if (< n (- wordsize (1<< s-n)))
+                                            `(v_ref ,last-bus-s-n ,(+ n (1<< s-n)))
+                                            'gnd
+                                        )
+                                        ;sal
+                                        ,(if (< n (1<< s-n))
+                                            'gnd
+                                            `(v_ref ,last-bus-s-n ,(- n (1<< s-n)))
+                                        )
+                                        ;sar
+                                        ,(if (< n (1<< s-n))
+                                            `(v_ref ,last-bus-s-n ,(+ n (1<< s-n)))
+                                            `(v_ref ,last-bus-s-n ,(- wordsize 1))
+                                        )
+                                        ;scl
+                                        (v_ref ,last-bus-s-n
+                                            ,(mod
+                                                (+ n (1<< s-n))
+                                                wordsize
+                                            )
+                                        )
+                                        ;scr
+                                        (v_ref ,last-bus-s-n
+                                            ,(mod
+                                                (- n (1<< s-n))
+                                                wordsize
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                    (setq last-bus-s-n bus-s-n)
+                    mux-bus
+                )
+            )
+        )
+    )
+)
+
+(defmacro make-circular-shifter (name wordsize)
+    (let (
+            (lg-wordsize (log wordsize 2))
+            (last-bus-s-n 'in)
+        )
+        `(v_module ,name (
+                (output (,wordsize out))
+                (input
+                    (,wordsize in)
+                    (,lg-wordsize shamt)
+                )
+            )
+            ,@(foreach s-n (range lg-wordsize)
+                (write 'k)
+                (let* (
+                        (bus-s-n
+                            (if (=
+                                    s-n
+                                    (- lg-wordsize 1)
+                                )
+                                'out
+                                (read-from-string
+                                    (strcat
+                                        "in_"
+                                        (write-to-string s-n)
+                                    )
+                                )
+                            )
+                        )
+                        (mux-bus
+                            `(progn
+                                (v_wire
+                                    (,wordsize
+                                        ,bus-s-n
+                                    )
+                                )
+                                ,@(foreach n (range wordsize)
+                                    `(unit_mux
+                                        (v_ref ,bus-s-n ,n)
+                                        (v_ref shamt ,(- lg-wordsize s-n 1))
+                                        (v_ref ,last-bus-s-n ,n)
+                                        (v_ref ,last-bus-s-n
+                                            ,(mod
+                                                (+ n (1<< s-n))
+                                                wordsize
+                                            )
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                    (setq last-bus-s-n bus-s-n)
+                    mux-bus
+                )
+            )
+        )
+    )
+)
+
+(defmacro make-arithmetic-shifter (name wordsize)
+    (let (
+            (lg-wordsize (log wordsize 2))
+            (last-bus-s-n 'in)
+        )
+        `(v_module ,name (
+                (output (,wordsize out))
+                (input
+                    (,wordsize in)
+                    (,lg-wordsize shamt)
+                    direction
+                )
+            )
+            (v_supply0 gnd)
+            ,@(foreach s-n (range lg-wordsize)
+                (write 'k)
+                (let* (
+                        (bus-s-n
+                            (if (=
+                                    s-n
+                                    (- lg-wordsize 1)
+                                )
+                                'out
+                                (symcat 'in_ s-n)
+                            )
+                        )
+                        (mux-bus
+                            `(progn
+                                (v_wire
+                                    (,wordsize
+                                        ,bus-s-n
+                                    )
+                                )
+                                ,@(foreach n (range wordsize)
+                                    `(unit_mux
+                                        (v_ref ,bus-s-n ,n)
+                                        (v_ref shamt ,(- lg-wordsize s-n 1))
+                                        (v_ref ,last-bus-s-n ,n)
+                                        ,(if (> (+ n (1<< s-n)))
+                                            'gnd
+                                            (v_ref ,last-bus-s-n (> (+ n (1<< s-n))))
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                    (setq last-bus-s-n bus-s-n)
+                    mux-bus
+                )
+            )
+        )
+    )
+)
+
+(defmacro make-logical-shifter (name wordsize)
+    (let (
+            (lg-wordsize (log wordsize 2))
+            (last-bus-s-n 'in)
+        )
+        `(v_module ,name (
+                (output (,wordsize out))
+                (input
+                    (,wordsize in)
+                    (,lg-wordsize shamt)
+                    direction
+                )
+            )
+            (v_supply0 gnd)
+            ,@(foreach s-n (range lg-wordsize)
+                (write 'k)
+                (let* (
+                        (bus-s-n
+                            (if (=
+                                    s-n
+                                    (- lg-wordsize 1)
+                                )
+                                'out
+                                (symcat 'in_ s-n)
+                            )
+                        )
+                        (mux-bus
+                            `(progn
+                                (v_wire
+                                    (,wordsize
+                                        ,bus-s-n
+                                    )
+                                )
+                                ,@(foreach n (range wordsize)
+                                    `(unit_mux
+                                        (v_ref ,bus-s-n ,n)
+                                        (v_ref shamt ,(- lg-wordsize s-n 1))
+                                        (v_ref ,last-bus-s-n ,n)
+                                        ,(if (> (+ n (1<< s-n)))
+                                            'gnd
+                                            (v_ref ,last-bus-s-n (> (+ n (1<< s-n))))
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
+                    (setq last-bus-s-n bus-s-n)
+                    mux-bus
+                )
+            )
+        )
+    )
+)

@@ -1,0 +1,155 @@
+(use adders)
+;(adder sum c_out a b c_in)
+
+(defmacro make-multiplier (name n-bits &optional slice)
+    (let* (
+            (n-out-bits (* 2 n-bits))
+            (slice-sums
+                (foreach n (range (- n-bits 2))
+                    (symcat 'slice_sum_ n)
+                )
+            )
+        )
+        (if (not slice)
+            (progn
+                (setq slice (symcat name '_slice))
+                (setq slice-slice (symcat slice '_slice))
+                (eval
+                    `(v_module ,slice-slice (
+                            (output sum_out carry_out)
+                            (input sum_in a0 b carry_in)
+                        )
+                        (expand
+                            sum_out
+                            (full_adder
+                                carry_out
+                                sum_in
+                                (and
+                                    a0
+                                    b
+                                )
+                                carry_in
+                            )
+                        )
+                    )
+                )
+                (eval
+                    (let (
+                            (carries (gen-expand-variable))
+                        )
+                        `(v_module ,slice (
+                                (output
+                                    (,n-bits sum_out)
+                                    c_out
+                                )
+                                (input
+                                    (,(- n-bits 1) sum_in)
+                                    (,n-bits b)
+                                    a0
+                                    a1
+                                    c_in
+                                )
+                            )
+                            (v_supply0 gnd)
+                            (v_wire (,(- n-bits 1) carries))
+                            (expand
+                                (v_ref sum_out 0)
+                                (full_adder
+                                    (v_ref carries 0)
+                                    (and
+                                        a1
+                                        (v_ref b 0)
+                                    )
+                                    (and
+                                        a0
+                                        (v_ref b 1)
+                                    )
+                                    gnd
+                                )
+                            )
+                            ,@(foreach n (range 1 (- n-bits 1))
+                                `(,slice-slice
+                                    (v_ref sum_out ,n)
+                                    (v_ref carries ,n)
+                                    (v_ref sum_in ,(- n 1))
+                                    a0
+                                    (v_ref b ,(+ n 1))
+                                    (v_ref carries ,(- n 1))
+                                )
+                            )
+                            (full_adder
+                                (v_ref sum_out ,(- n-bits 1))
+                                c_out
+                                (v_ref sum_in ,(- n-bits 2))
+                                c_in
+                                (v_ref carries ,(- n-bits 2))
+                            )
+                        )
+                    )
+                )
+            )
+        )
+        `(v_module ,name (
+                (output (,n-out-bits out) overflow)
+                (input (,n-bits a b) signed_)
+            )
+            (v_supply0 gnd)
+            (v_wire
+                (,(- n-bits 2) carries)
+                (,(- n-bits 1) ,@slice-sums)
+            )
+            
+            ; trivial LSB
+            (v_and (v_ref out 0) (v_ref a 0) (v_ref b 0))
+            
+            ; LSB slice
+            (,slice
+                (v_ref out ,n-bits 1)
+                (v_ref carries 0)
+                ,(nth (- n-bits 3) slice-sums)
+                b
+                (v_ref a 0)
+                (v_ref a 1)
+                gnd
+            )
+            
+            ; make the middle slices moving from LSB towards MSB
+            ,@(foreach n (range 1 (- n-bits 2))
+                `(,slice
+                    (v_cat
+                        (v_ref out ,(+ n-bits n))
+                        ,(nth (- n-bits n 2) slice-sums)
+                    )
+                    (v_ref carries ,n)
+                    ,(nth (- n-bits n 3) slice-sums)
+                    b
+                    (v_ref a ,n)
+                    (v_ref a ,(+ n 1))
+                    (v_ref carries ,(- n 1))
+                )
+            )
+            
+            ; MSB slice
+            (v_wire (,(- n-bits 1) last_sum_in))
+            ,@(foreach n (range (- n-bits 1))
+                `(v_and
+                    (v_ref last_sum_in ,n)
+                    (v_ref a ,(- n-bits 1))
+                    (v_ref b ,(+ n 1))
+                )
+            )
+            (,slice
+                (v_cat
+                    (v_ref out ,(- n-out-bits 2))
+                    ,(nth 0 slice-sums)
+                )
+                (v_ref out ,(- n-out-bits 1))
+                last_sum_in
+                b
+                (v_ref a ,(- n-bits 2))
+                (v_ref a ,(- n-bits 1))
+                (v_ref carries ,(- n-bits 3))
+            )
+        )
+    )
+)

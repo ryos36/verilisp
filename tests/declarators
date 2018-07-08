@@ -1,0 +1,32 @@
+(reg a)
+(reg (8 aa))
+(reg (8 (4 aaa aab) ab) aba)
+(wire b)
+(wire (3 bb))
+(wand c)
+(wor d)
+(integer e ee (4 eee))
+(parameter ff 8)
+(parameter ffg 9)
+(trireg g)
+
+================================================================================
+
+module _$_;
+    reg a;
+    reg [7 : 0] aa;
+    reg [7 : 0] aaa [3 : 0];
+    reg [7 : 0] aab [3 : 0];
+    reg [7 : 0] ab;
+    reg aba;
+    wire b;
+    wire [2 : 0] bb;
+    wand c;
+    wor d;
+    integer e;
+    integer ee;
+    integer eee [3 : 0];
+    parameter ff = 8;
+    parameter ffg = 9;
+    trireg g;
+endmodule

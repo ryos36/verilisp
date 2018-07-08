@@ -1,0 +1,289 @@
+(use muxes)
+
+(v_module full_adder (
+        (output sum c_out)
+        (input a b c_in)
+    )
+    (v_wire a_xor_b)
+    (v_xor a_xor_b a b)
+    (v_xor sum a_xor_b c_in)
+    (expand c_out (or (and a b) (and c_in a_xor_b)))
+)
+
+(defmacro make-adder (name n-bits)
+    ; n-bits full_adders
+    `(v_module ,name (
+            (output (,n-bits out) overflow)
+            (input (,n-bits a b))
+        )
+        (v_wire
+            ; 1 more carry than adders
+            (,(+ n-bits 1) carries)
+        )
+        (v_supply0 gnd)
+        (v_buf (v_ref carries 0) gnd)
+        ,@(foreach n (range n-bits)
+            `(full_adder
+                (v_ref out ,n)
+                (v_ref carries ,(+ n 1))
+                (v_ref a ,n)
+                (v_ref b ,n)
+                (v_ref carries ,n)
+            )
+        )
+        (v_xor
+            overflow
+            (v_ref carries ,n-bits)
+            (v_ref carries ,(- n-bits 1))
+        )
+    )
+)
+
+(defmacro make-addsuber (name n-bits)
+    `(v_module ,name (
+            (output (,n-bits out) overflow)
+            (input (,n-bits a b) subtract)
+        )
+        (v_wire
+            (,n-bits carries)
+        )
+        ,@(foreach n (range n-bits)
+            `(expand
+                (v_ref out ,n)
+                (v_ref carries ,n)
+                (full_adder
+                    (unit_mux
+                        (v_ref a ,n)
+                        subtract
+                        (not (v_ref a ,n))
+                    )
+                    (unit_mux
+                        (v_ref b ,n)
+                        subtract
+                        (not (v_ref b ,n))
+                    )
+                    ,(if (eq n 0)
+                        'subtract
+                        `(v_ref carries ,(- n 1))
+                    )
+                )
+            )
+        )
+        (v_xor
+            overflow
+            (v_ref carries ,(- n-bits 1))
+            (v_ref carries ,(- n-bits 2))
+        )
+    )
+)
+
+;;;; carry-select adders
+
+(defun *make-csaddsuber-half-slice-bit* (name)
+    (eval
+        `(v_module ,name (
+                (output sum c_out)
+                (input a b subtract c_in)
+            )
+            (expand
+                sum
+                (full_adder
+                    c_out
+                    a
+                    (unit_mux
+                        subtract
+                        b
+                        (not b)
+                    )
+                    c_in
+                )
+            )
+        )
+    )
+)
+
+(defun *make-csaddsuber-half-slice* (name n-bits slice-bit)
+    (eval
+        `(v_module ,name (
+                (output (,n-bits out) c_out overflow)
+                (input (,n-bits a b) c_in subtract)
+            )
+            (v_wire
+                (,n-bits carries)
+            )
+            ,@(foreach n (range n-bits)
+                `(,slice-bit
+                    (v_ref out ,n)
+                    (v_ref carries ,n)
+                    (v_ref a ,n)
+                    (v_ref b ,n)
+                    subtract
+                    ,(if (eq n 0)
+                        'c_in
+                        `(v_ref carries ,(- n 1))
+                    )
+                )
+            )
+            (v_xor
+                overflow
+                (v_ref carries ,(- n-bits 1))
+                (v_ref carries ,(- n-bits 2))
+            )
+            (v_buf
+                c_out
+                (v_ref carries ,(- n-bits 1))
+            )
+        )
+    )
+)
+(defun *make-csaddsuber-slice* (name n-bits half-slice mux)
+    (eval
+        `(v_module ,name (
+                (output (,n-bits out) c_out overflow)
+                (input (,n-bits a b) c_in subtract)
+            )
+            (v_supply0 gnd)
+            (v_supply1 vdd)
+            (v_wire (,n-bits sum0 sum1) c_out_0 c_out_1)
+            (,half-slice sum0 c_out_0 overflow_0 a b c_in subtract)
+            (,half-slice sum1 c_out_1 overflow_1 a b c_in subtract)
+            (,mux out c_in sum0 sum1)
+            (unit_mux c_out c_in c_out_0 c_out_1)
+            (unit_mux overflow c_in overflow_0 overflow_1)
+        )
+    )
+)
+(defmacro make-csaddsuber (name n-bits &key mux slice half-slice half-slice-bit carry-in)
+    ; make a n-bits-bit carry-select adder/subtracter with n-selects carry-selector muxes
+    ; http://en.wikipedia.org/wiki/Carry_select_adder
+    (let* (
+            (n-bits-per-select (floor (sqrt n-bits)))
+            (n-selects (ceiling (/ n-bits n-bits-per-select)))
+            (ns-1*nbps (* (- n-selects 1) n-bits-per-select))
+            (baby-slice (< ns-1*nbps n-bits))
+        )
+        (if (not half-slice-bit)
+            (progn
+                (setq half-slice-bit (symcat name '_half_slice_bit_ n-bits-per-select))
+                (*make-csaddsuber-half-slice-bit* half-slice-bit)
+            )
+        )
+        (if (not half-slice)
+            (progn
+                (setq half-slice (symcat name '_half_slice_ n-bits-per-select))
+                (*make-csaddsuber-half-slice* half-slice n-bits-per-select half-slice-bit)
+            )
+        )
+        (if (not mux)
+            (progn
+                (setq mux (symcat name '_mux_ n-bits-per-select))
+                (eval `(make-mux ,mux 1 ,n-bits-per-select))
+            )
+        )
+        (if (not slice)
+            (progn
+                (setq slice (symcat name '_slice_ n-bits-per-select))
+                (*make-csaddsuber-slice* slice n-bits-per-select half-slice mux)
+            )
+        )
+        (if baby-slice
+            (progn
+                (setq baby-slice (symcat slice '_baby))
+                (*make-csaddsuber-slice* baby-slice (- n-bits ns-1*nbps) half-slice mux)
+            )
+        )
+        `(v_module ,name (
+                (output (,n-bits out) overflow)
+                (input
+                    (,n-bits a b)
+                    ,@(if carry-in
+                        '(c_in)
+                    )
+                    subtract
+                )
+            )
+            (v_wire (,n-selects carries overflows))
+            (,half-slice
+                (v_ref out ,(- n-bits-per-select 1) 0)
+                (v_ref carries 0)
+                (v_ref overflows 0)
+                (v_ref a ,(- n-bits-per-select 1) 0)
+                (v_ref b ,(- n-bits-per-select 1) 0)
+                ,(if carry-in
+                    'c_in
+                    'subtract
+                )
+                subtract
+            )
+            ,@(foreach n (range 1 (if baby-slice (- n-selects 1) n-selects))
+                (let (
+                        (upper 
+                            (-
+                                (*
+                                    (+ n 1)
+                                    n-bits-per-select
+                                )
+                                1
+                            )
+                        )
+                        (lower (* n n-bits-per-select))
+                    )
+                    `(,slice
+                        (v_ref out ,upper ,lower)
+                        (v_ref carries ,n)
+                        (v_ref overflows ,n)
+                        (v_ref a ,upper ,lower)
+                        (v_ref b ,upper ,lower)
+                        (v_ref carries ,(- n 1))
+                        subtract
+                    )
+                )
+            )
+            ,(if baby-slice
+                ; if (log n-bits 2) is odd, n-selects is off by 1, so we compensate here with a baby-slice
+                `(,baby-slice
+                    (v_ref out ,(- n-bits 1) ,ns-1*nbps)
+                    (v_ref carries ,(- n-selects 1))
+                    (v_ref overflows ,(- n-selects 1))
+                    (v_ref a ,(- n-bits 1) ,ns-1*nbps)
+                    (v_ref b ,(- n-bits 1) ,ns-1*nbps)
+                    (v_ref carries ,(- n-selects 2))
+                    subtract
+                )
+            )
+            (v_buf overflow (v_ref overflows ,(- n-selects 1)))
+        )
+    )
+)
+(defmacro make-tester-addsuber (tester-name addsuber-name n-bits &key (n-iterations 1000) (delay 1000))
+    `(v_module ,tester-name ()
+        (v_reg (,n-bits a b) subtract)
+        (v_wire (,n-bits out) overflow)
+        (,addsuber-name out overflow a b subtract)
+        (v_parameter N ,n-iterations)
+        (v_integer i)
+        (v_initial
+            (v_= subtract 0)
+            (v_fromto i 0 ,n-iterations
+                (v_= a (random))
+                (v_= b (random))
+                (v_delay ,delay nil)
+                (v_if (v_!= out (v_+ a b))
+                    (v_display "error: %d + %d != %d" a b out)
+                )
+            )
+            (v_= subtract 1)
+            (v_fromto i 0 ,n-iterations
+                (v_= a (random))
+                (v_= b (random))
+                (v_delay ,delay nil)
+                (v_if (v_!= out (v_- a b))
+                    (v_display "error: %d - %d != %d" a b out)
+                )
+            )
+        )
+    )
+)
+
+; VERILISP RULE OF THUMB
+; when an expand is inside an arbitrarily-sized loop, break it out into a module -- this will greatly reduce the amount of verilog code generated.
