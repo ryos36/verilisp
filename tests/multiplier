@@ -98,6 +98,18 @@ module full_adder(sum, c_out, a, b, c_in);
     and anon_13 (anon_10, c_in, a_xor_b);
 endmodule
 
+module mul_slice_slice(sum_out, carry_out, sum_in, a0, b, carry_in);
+    output sum_out;
+    output carry_out;
+    input sum_in;
+    input a0;
+    input b;
+    input carry_in;
+    wire anon_14;
+    full_adder anon_15 (sum_out, carry_out, sum_in, anon_14, carry_in);
+    and anon_16 (anon_14, a0, b);
+endmodule
+
 module mul_slice(sum_out, c_out, sum_in, b, a0, a1, c_in);
     output [3 : 0] sum_out;
     output c_out;
@@ -108,36 +120,34 @@ module mul_slice(sum_out, c_out, sum_in, b, a0, a1, c_in);
     input c_in;
     supply0 gnd;
     wire [2 : 0] carries;
-    wire anon_15;
-    wire anon_16;
-    full_adder anon_17 (sum_out[0], carries[0], anon_15, anon_16, gnd);
-    and anon_18 (anon_15, a1, b[0]);
-    and anon_19 (anon_16, a0, b[1]);
-    wire anon_20;
-    full_adder anon_21 (sum_out[1], carries[1], sum_in[0], anon_20, carries[0]);
-    and anon_22 (anon_20, a0, b[2]);
-    wire anon_23;
-    full_adder anon_24 (sum_out[2], carries[2], sum_in[1], anon_23, carries[1]);
-    and anon_25 (anon_23, a0, b[3]);
-    full_adder anon_26 (sum_out[3], c_out, sum_in[2], c_in, carries[2]);
+    wire anon_18;
+    wire anon_19;
+    full_adder anon_20 (sum_out[0], carries[0], anon_18, anon_19, gnd);
+    and anon_21 (anon_18, a1, b[0]);
+    and anon_22 (anon_19, a0, b[1]);
+    mul_slice_slice anon_23 (sum_out[1], carries[1], sum_in[0], a0, b[2], carries[0]);
+    mul_slice_slice anon_24 (sum_out[2], carries[2], sum_in[1], a0, b[3], carries[1]);
+    full_adder anon_25 (sum_out[3], c_out, sum_in[2], c_in, carries[2]);
 endmodule
 
-module mul(out, a, b);
+module mul(out, overflow, a, b, signed_);
     output [7 : 0] out;
+    output overflow;
     input [3 : 0] a;
     input [3 : 0] b;
+    input signed_;
     supply0 gnd;
     wire [1 : 0] carries;
     wire [2 : 0] slice_sum_0;
     wire [2 : 0] slice_sum_1;
-    and anon_27 (out[0], a[0], b[0]);
-    mul_slice anon_28 (out[4 : 1], carries[0], slice_sum_1, b, a[0], a[1], gnd);
-    mul_slice anon_29 ({out[5], slice_sum_1}, carries[1], slice_sum_0, b, a[1], a[2], carries[0]);
+    and anon_26 (out[0], a[0], b[0]);
+    mul_slice anon_27 (out[4 : 1], carries[0], slice_sum_1, b, a[0], a[1], gnd);
+    mul_slice anon_28 ({out[5], slice_sum_1}, carries[1], slice_sum_0, b, a[1], a[2], carries[0]);
     wire [2 : 0] last_sum_in;
-    and anon_30 (last_sum_in[0], a[3], b[1]);
-    and anon_31 (last_sum_in[1], a[3], b[2]);
-    and anon_32 (last_sum_in[2], a[3], b[3]);
-    mul_slice anon_33 ({out[6], slice_sum_0}, out[7], last_sum_in, b, a[2], a[3], carries[1]);
+    and anon_29 (last_sum_in[0], a[3], b[1]);
+    and anon_30 (last_sum_in[1], a[3], b[2]);
+    and anon_31 (last_sum_in[2], a[3], b[3]);
+    mul_slice anon_32 ({out[6], slice_sum_0}, out[7], last_sum_in, b, a[2], a[3], carries[1]);
 endmodule
 
 module test_slice();
@@ -148,7 +158,7 @@ module test_slice();
     reg a0;
     reg a1;
     reg c_in;
-    mul_slice anon_34 (sum_out, c_out, sum_in, b, a0, a1, c_in);
+    mul_slice anon_33 (sum_out, c_out, sum_in, b, a0, a1, c_in);
     initial
     begin
         sum_in = 1;
@@ -165,7 +175,9 @@ module test_mul();
     reg [3 : 0] a;
     reg [3 : 0] b;
     wire [7 : 0] out;
-    mul anon_35 (out, a, b);
+    wire overflow;
+    wire signed_;
+    mul anon_34 (out, overflow, a, b, signed_);
     initial
     begin
         $dumpfile("test.vcd");

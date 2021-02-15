@@ -1,6 +1,7 @@
 (use muxes)
 (use adders)
-(use clock)
+(use clocks)
+(make-clock clock)
 (use dff)
 
 ================================================================================
@@ -43,6 +44,7 @@ endmodule
 
 module clock(clk);
     output clk;
+    reg clk;
     initial
     begin
         clk = 0;

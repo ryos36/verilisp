@@ -17,7 +17,7 @@ DIFFER = difflib.unified_diff
 MANGLER = 'v_'    # must match 'verilog-name-mangle' in verilisp.cl
 ANTIMANGLER = 'l_'    # let you use lisp's 'and', etc. as 'l_and'
 ENABLE_SECRET_BACKQUOTE_PROGN = True
-TEST_ON_ARGLESS = False
+TEST_ON_ARGLESS = True
 NAMES_TO_MANGLE = [
     # special forms
     '@', 'fork', 'release', 'assign', 'deassign', 'task', 'function', '=', 'n=', 
@@ -76,7 +76,7 @@ SPECIAL_NAMES_TO_MANGLE = {
 }
 
 def DEBUG(x):
-    print x
+    print(x)
     return x
 
 def mangle(code):
@@ -92,7 +92,7 @@ def mangle(code):
                 code
             )
         )
-    for old, new in SPECIAL_NAMES_TO_MANGLE.iteritems():
+    for old, new in SPECIAL_NAMES_TO_MANGLE.items():
         code = re.sub(
             ('\(%s(?=[\s\(\)])' % re.escape(old)),    # )
             ('(' + MANGLER + new),    # )
@@ -109,15 +109,20 @@ def backquote_progn(s):
         return s
 
 def translate(vl_code):
-    i, o = os.popen2(VERILISP_CMD)
+    import subprocess
+
+    p = subprocess.Popen(VERILISP_CMD, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, close_fds=True)
+    i, o = p.stdin, p.stdout
     i.write(
+        (
         backquote_progn(
             mangle(vl_code)
         )
         + '\n(__end__)\n'
+        ).encode('utf-8')
     )
     i.close()
-    return o.read()
+    return o.read().decode('utf-8')
 
 TEST_DIVIDER = '\n%s\n' % ('=' * 80)    # in files in the tests directory, separates the verilisp code from the equivalent verilog code
 
@@ -126,21 +131,20 @@ def test():
     dn = os.path.join(__dir__, 'tests')
     for fn in os.listdir(dn):
         try:
-            vl_code, v_code = file(os.path.join(dn, fn)).read().split(TEST_DIVIDER)
+            with open(os.path.join(dn, fn), mode='r') as f:
+                vl_code, v_code = f.read().split(TEST_DIVIDER)
         except:
-            print "test %s is malformed" % fn
+            print(f'test {fn} is malformed')
             continue
         test = translate(vl_code)
         if test == v_code:
-            print 'Success:\t' + fn
+            print('Success:\t' + fn)
             successes += 1
         else:
-            print 'Failure:\t%s\n    translate(%r)\n    should equal\n    %r\n    but was\n    %r\n    with difference\n%s' % (
-                fn, vl_code, v_code, test, '\n'.join(DIFFER(v_code.split('\n'), test.split('\n')))
-            )
+            print('Failure:\t%s\n    translate(%r)\n    should equal\n    %r\n    but was\n    %r\n    with difference\n%s' % (fn, vl_code, v_code, test, '\n'.join(DIFFER(v_code.split('\n'), test.split('\n')))))
             failures += 1
         print
-    print '%d successes, %d failures' % (successes, failures)
+    print(f'{successes} successes, {failures} failures')
 
 def interactive_interpret():
     global ENABLE_SECRET_BACKQUOTE_PROGN
@@ -180,15 +184,13 @@ def main(argv):
     elif argv:
         for arg in argv:
             if arg in ['-h', '--help', '-H']:
-                print usage
+                print(usage)
             elif arg == '-t':
                 test()
             elif os.path.isfile(arg):
-                input_ = file(arg)
-                output = file(os.path.splitext(arg)[0] + '.v', 'w')
-                output.write(translate(input_.read()))
-                input_.close()
-                output.close()
+                with open(arg, mode='r') as in_f:
+                    with open(os.path.splitext(arg)[0] + '.v', 'w') as out_f:
+                        out_f.write(translate(in_f.read()))
     elif TEST_ON_ARGLESS:
         test()
     else:
