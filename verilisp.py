@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 ''' a script for converting verilisp '.vl' files into verilog code using the Common Lisp script 'verilisp.cl'.
 '''
 import os, sys, re, difflib
