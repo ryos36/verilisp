@@ -9,6 +9,9 @@
 (use-package 'cs-common-lisp-user)
 (setq *print-base* 10)
 
+(defparameter *transport-delay* nil)
+(defparameter *inertial-delay* nil)
+
 (defun debug-write (x) (write x))
 (defun DEBUG (x)       (write x))
 
@@ -1282,6 +1285,20 @@
     (write-string ";")
 )
 
+(defmacro v_<= (lvalue expr &optional 
+                       (transport-delay *transport-delay*)
+                       (inertial-delay *inertial-delay*))
+    (nli)
+    (if inertial-delay 
+      (format t "#~a " inertial-delay))
+    (write-or-eval lvalue)
+    (write-string " <= ")
+    (if transport-delay 
+      (format t "#~a " transport-delay))
+    (write-or-eval expr)
+    (write-string ";")
+)
+
 (defmacro v_deassign (&rest lvalues)
     (nli)
     (write-string "deassign ")
@@ -1926,6 +1943,8 @@
         )
     )
 )
+
+
 
 
 ;;; END VERILISP LANGUAGE

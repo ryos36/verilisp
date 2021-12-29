@@ -1,5 +1,33 @@
 (assign x 4\'b0000)
 
+(setf *transport-delay* 1)
+
+(module sim_count 
+ ((input clk)
+  (input debug_v))
+
+  (reg (16 count))
+  (reg debug_v_d)
+
+  (assign debug_v_d (format t "4'h~a" (tobase 333 16)))
+  (always ((posedge clk))
+    (<= debug_v_d debug_v)
+    (n= debug_v_d debug_v) ; original style
+  ))
+
 ================================================================================
 
 assign x = 4'b0000;
+module sim_count(clk, debug_v);
+    input clk;
+    input debug_v;
+    reg [15 : 0] count;
+    reg debug_v_d;
+    assign debug_v_d = 4'h14D;
+    always
+        @(posedge clk)
+    begin
+        debug_v_d <= #1 debug_v;
+        debug_v_d <= debug_v;
+    end
+endmodule
