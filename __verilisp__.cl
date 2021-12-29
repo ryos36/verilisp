@@ -15,8 +15,8 @@
 (defparameter *transport-delay* nil)
 (defparameter *inertial-delay* nil)
 
-(defun debug-write (x) (write x))
-(defun DEBUG (x)       (write x))
+(defun debug-write (x) (princ x *error-output*))
+(defun DEBUG (x)       (princ x *error-output*))
 
 (defun make-prologue ()
   (if *timescale*
@@ -1340,11 +1340,11 @@
 
 (defmacro v_? (condition yes no)
     (write-string " ( ( ")
-    (eval condition)
+    (write-or-eval condition)
     (write-string " ) ? ( ")
-    (eval yes)
+    (write-or-eval yes)
     (write-string " ) : ( ")
-    (eval no)
+    (write-or-eval no)
     (write-string ") )")
     nil
 )

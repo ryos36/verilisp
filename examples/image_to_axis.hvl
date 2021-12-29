@@ -1,0 +1,136 @@
+(setf *transport-delay* 1)
+(make-prologue)
+
+(use clocks)
+
+(defmacro make-concat-symbol (syms)
+ (intern 
+  (reduce #'(lambda (x y) (concatenate 'string (string x) (string y))) syms)))
+
+(defun make-axi (tdata_width &optional axi-name)
+      (copy-tree
+        `((output tvalid)
+          (input tready)
+          (output (,tdata_width tdata))
+          (output tuser)
+          (output tlast))))
+
+
+(defmacro make_image_to_axis (module-name image_file image_size &optional (data_width 8))
+    `(module ,module-name 
+     ((input clk)
+      (input rst)
+      ,@(make-axi data_width))
+
+      (integer fp)
+      (integer num)
+
+      (reg (12 width))
+      (reg (11 height))
+      (reg (12 hcount))
+      (reg (11 vcount))
+
+      (reg tvalid_r)
+      (reg tuser_r)
+      (reg tlast_r)
+      (reg init_done)
+
+      (reg (,data_width (,image_size mem)))
+
+      (v_initial
+        (= init_done 1'b0)
+        (= fp (fopen ,image_file, "rb"))
+        (= num (fread mem fp))
+
+        (write "%d read" num)
+        (fclose fp)
+        (if (== num ,image_size)
+         (= init_done (b 1 1))))
+
+        (reg (32 image_count))
+
+        (assign tvalid tvalid_r)
+        (wire (,data_width tdata_from_mem))
+        (wire (,data_width tdata_from_vcount))
+        (assign tdata_from_mem (ref mem image_count))
+
+        (wire data_valid)
+        (assign data_valid (& init_done tvalid tready))
+
+        (wire (,data_width tdata_w))
+        (assign tdata_w (? data_valid tdata_from_mem tdata_from_vcount))
+        (assign tdata tdata_w)
+        (assign tuser tuser_r)
+        (assign tlast tlast_r)
+
+        (always ((posedge clk))
+          (if (== rst 1'b1) 
+            (progn
+              (<= hcount 12'd0)
+              (<= vcount 12'd0)
+              (<= tvalid_r 1'b0)
+              (<= tuser_r 1'b0)
+              (<= tlast_r 1'b0)
+              (<= image_count 12'd0))
+            (progn
+              (if (== init_done 1'b0) 
+                (progn 
+                  (display "Fatal Error")
+                  (finish)))
+              (if (== tvalid_r 1'b0) 
+                (<= tvalid_r 1'b1)
+                (progn
+                  (if (== tready 1'b1)
+                    (progn
+                      (<= tlast_r 1'b0)
+                      (<= hcount 12'd0)
+                      (if (== vcount height)
+                        (progn
+                          (<= vcount 12'd0)
+                          (<= tuser_r 1'b1)
+                          (<= image_count 12'd0))
+                        (++ image_count))
+                      (progn
+                        (++ image_count))))
+                  (if (== hcount (- width 2))
+                    (progn
+                      (++ vcount)
+                      (<= tlast_r 1'b1))))))))))
+
+(make_image_to_axis axis_m0 "multiplier.v" 512)
+
+(module tb ()
+ (reg clk)
+ (reg rst)
+
+ (always ()
+    (# 5)
+    (= clk (! clk)))
+
+ (reg tready)
+ (wire b e f)
+ (wire (8 d))
+ ;(axis_m0 clk rst b c d e f)
+ (axis_m0 :name dut_axis_m0 clk rst b tready d e f)
+ (initial
+    (= clk 0)
+    (dumpfile "abc.vcd")
+    (dumpvars 0 dut_axis_m0)
+    (# 200)
+    (= rst 0)
+
+    (# 200)
+    (= rst 1)
+
+    (# 200)
+    (= rst 0)
+
+    (# 200)
+    (= tready 1'b1)
+
+    (# 3000)
+    (finish))
+)
+
+(v_reg (8 (8 data)))
+(make-epilogue)
