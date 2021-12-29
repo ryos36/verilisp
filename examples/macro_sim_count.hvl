@@ -1,0 +1,23 @@
+(setf *transport-delay* 1)
+(make-prologue)
+
+(defmacro make_sim_count(module-name name &optional (w 16) (sup "0"))
+    `(module ,module-name 
+     ((input clk)
+      (input debug_v))
+
+      (reg (,w count))
+      (reg debug_v_d)
+
+      (always ((posedge clk))
+        (<= debug_v_d debug_v)
+        (if (!= debug_v debug_v_d)
+          (progn
+           (v_if (v_~ ,sup) 
+            (display "%t:%s %d %d" (time) ,name debug_v_d (+ count 1)))
+           (<= count 0))
+          (++ count)))))
+
+(make_sim_count sim_count "test0")
+(make_sim_count sim_count_v2 "test1" 10)
+(make-epilogue)

@@ -4,8 +4,8 @@
 import os, sys, re, difflib
 
 usage = '''
-    $ python verilisp.py 1.vl
-    compiles verilisp file 1.vl to verilog 1.v
+    $ python verilisp.py 1.hvl
+    compiles verilisp file 1.hvl to verilog 1.v
     $ python verilisp.py
     tests verilisp
 '''
@@ -105,7 +105,7 @@ def backquote_progn(s):
     ''' let you comma outside backquote, so you don't need to use eval or defmacro explicitly.
     '''
     if ENABLE_SECRET_BACKQUOTE_PROGN:
-        return '(eval `(progn %s))' % s
+        return f'(eval `(progn {s}))'
     else:
         return s
 

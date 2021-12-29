@@ -1,0 +1,23 @@
+(setf *transport-delay* 1)
+(setf *nettype-epilogue* 'wire)
+(make-prologue)
+
+(module sim_count 
+ ((input clk)
+  (input debug_v))
+
+  (reg (16 count))
+  (reg debug_v_d)
+  (wire (12 test_w))
+
+  (assign test_w (format t "12'h~a" (tobase 333 16)))
+
+  (always ((posedge clk))
+    (<= debug_v_d debug_v)
+    (if (!= debug_v debug_v_d)
+      (progn
+       (display "%t %d %d" (time) debug_v_d (+ count 1))
+       (<= count 0))
+      (++ count))))
+
+(make-epilogue)

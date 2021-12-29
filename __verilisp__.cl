@@ -9,11 +9,26 @@
 (use-package 'cs-common-lisp-user)
 (setq *print-base* 10)
 
+(defparameter *timescale* '(1000 1))
+(defparameter *nettype-prologue* "none")
+(defparameter *nettype-epilogue* nil)
 (defparameter *transport-delay* nil)
 (defparameter *inertial-delay* nil)
 
 (defun debug-write (x) (write x))
 (defun DEBUG (x)       (write x))
+
+(defun make-prologue ()
+  (if *timescale*
+    (format t "`timescale ~ans / ~aps~%" 
+            (/ (car *timescale*) 1000)
+            (cadr *timescale*)))
+  (if *nettype-prologue*
+    (format t "`default_nettype ~a~%" *nettype-prologue*)))
+
+(defun make-epilogue ()
+  (if *nettype-epilogue*
+    (format t "~%`default_nettype ~a~%" *nettype-epilogue*)))
 
 ;;; BEGIN HELPER macros, functions, and variables
 
