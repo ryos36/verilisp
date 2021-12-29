@@ -39,7 +39,7 @@ NAMES_TO_MANGLE = [
     'fstrobe', 'fstrobeh', 'fstrobeb', 'fstrobeo',
     'monitor', 'monitorh', 'monitorb', 'monitoro',
     'fmonitor', 'fmonitorh', 'fmonitorb', 'fmonitoro',
-    'fopen', 'fclose',
+    'fopen', 'fclose', 'fread',
     'time', 'stime', 'realtime', 'scale', 'printtimescale', 'timeformat',
     'stop', 'finish', 'save', 'incsave', 'restart', 'log', 'nolog', 'key', 'nokey',
     'scope', 'showscopes', 'showvars', 'countdrivers', 'list',

@@ -1710,7 +1710,7 @@
         fstrobe fstrobeh fstrobeb fstrobeo
         monitor monitorh monitorb monitoro
         fmonitor fmonitorh fmonitorb fmonitoro
-        fopen fclose
+        fopen fclose fread
         printtimescale timeformat scale
         stop finish save incsave restart input log nolog key nokey
         scope showscopes showvars countdrivers list
@@ -1905,15 +1905,17 @@
         (symbol '(" = " " <= "))
     )
     (eval
-        `(defmacro ,(mangle name) (name wait-or-value &optional value-or-nil)
-            (nli)
+        `(defmacro ,(mangle name) (name wait-or-value &optional value-or-nil nononli)
+           (if (not nononli)
+            (nli))
             (write-or-eval name)
             (write-string ,symbol)
             (write-or-eval wait-or-value)
             (if value-or-nil
                 (write-or-eval value-or-nil)
             )
-            (write-string ";")
+            (if (or (atom wait-or-value) (not (find (car wait-or-value) '(v_fopen v_fread v_fwrite))))
+              (write-string ";"))
             nil
         )
     )
