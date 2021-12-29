@@ -557,12 +557,19 @@
 
 (defvar indentation 0)    ; current indentation level (multiple of 4)
 
+(defun symbol-to-v_const (symbol)
+  (if (and (symbolp symbol)
+           (search "'" (symbol-name symbol)))
+    (format t "~a" symbol)
+    (write symbol)))
+
 (defun write-or-eval (symbol)
     (if (atom symbol)
-        (write symbol)
+        (symbol-to-v_const symbol)
         (eval symbol)
     )
 )
+
 (defun eval-or-write (symbol) (write-or-eval symbol))
 
 (defun indent (&optional (n-spaces indentation))

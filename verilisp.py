@@ -98,6 +98,7 @@ def mangle(code):
             ('(' + MANGLER + new),    # )
             code
         )
+    code = re.sub(r"([0-9]+)'", r"\g<1>\'", code)
     return code
 
 def backquote_progn(s):
