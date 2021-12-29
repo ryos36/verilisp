@@ -114,6 +114,7 @@ def translate(vl_code):
 
     p = subprocess.Popen(VERILISP_CMD, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, close_fds=True)
     i, o = p.stdin, p.stdout
+    vl_code = f'(add-verilisp-path "{__dir__}/lib/")' + vl_code
     i.write(
         (
         backquote_progn(
