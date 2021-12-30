@@ -1,0 +1,2 @@
+(use mems)
+(make-mem imem 32 "file.hex" :input-format 'h)

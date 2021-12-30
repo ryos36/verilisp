@@ -1,0 +1,70 @@
+(setq *transport-delay* 1)
+(make-prologue)
+
+(defvar *start-addr* #x0)
+(defmacro start-addr ()
+    `(write ,*start-addr*))
+
+(use mems)
+(make-mem imem 32 "file.hex" :input-format h :n-words 3)
+
+(module core
+  ((input clk)
+   (input rst)
+
+   (output (32 iaddr))
+   (input (32 inst))
+
+   (output exit))
+
+  (reg (32 pc))
+  (assign iaddr pc)
+
+  (always ((posedge clk))
+    (if rst
+        (<= pc 0)
+        (<= pc (+ pc 4)))))
+
+(module top ()
+  (reg clk rst)
+  (wire exit)
+  (wire (32 addr inst))
+
+  (always ()
+    (# 5)
+    (= clk (! clk)))
+
+  (core :name core0 clk rst addr inst exit)
+  (imem :name imem0 inst (>> addr 2))
+
+  (always ((posedge clk))
+    (if (== rst 0)
+     (display "%t %x:%x" (time) addr inst)))
+    
+  (integer i j)
+  (initial
+    (= clk 0)
+
+    (dumpfile "core.vcd")
+    (dumpvars 0 core0)
+    (dumpvars 0 imem0)
+    (dumpvars 0 addr)
+    (dumpvars 0 inst)
+
+    (for (i 0) (< i 3) (i (+ i 1))
+        (display "%d:%x" i imem0.data[i])
+    )
+    (# 200)
+    (= rst 0)
+
+    (# 200)
+    (= rst 1)
+
+    (# 200)
+    (= rst 0)
+
+    (# 200)
+
+    (# 3000)
+    (finish)))
+    
