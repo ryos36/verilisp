@@ -6,7 +6,7 @@
     `(write ,*start-addr*))
 
 (use mems)
-(make-mem imem 32 "file.hex" :input-format h :n-words 3)
+(make-mem imem 32 "file.hex" :input-format h :n-words 3 :buf-delay 1)
 
 (module core
   ((input clk)
@@ -18,12 +18,41 @@
    (output exit))
 
   (reg (32 pc))
+  (reg (32 (32 regfile)))
+
+  ;----------------------------------------------------------------
   (assign iaddr pc)
+  (wire (5 rs1_addr))
+  (wire (5 rs2_addr))
+  (wire (5 wb_addr))
+
+  (assign rs1_addr (ref inst 19 5))
+  (assign rs2_addr (ref inst 24 20))
+  (assign wb_addr (ref inst 11 7))
+
+  (wire (32 rs1_data))
+  (wire (32 rs2_data))
+  (assign rs1_data (? (== rs1_addr 0) (ref regfile rs1_addr) 0))
+  (assign rs2_data (? (== rs2_addr 0) (ref regfile rs2_addr) 0))
 
   (always ((posedge clk))
     (if rst
         (<= pc 0)
-        (<= pc (+ pc 4)))))
+        (progn
+           
+          (display "pc:%h" pc)
+          (display "inst:%h" inst)
+          (display "rs1_addr:%d" rs1_addr)
+          (display "rs2_addr:%d" rs2_addr)
+          (display "wb_addr:%d" wb_addr)
+          (display "rs1_data:%x" rs1_data)
+          (display "rs2_data:%x" rs2_data)
+          (display "-----------------------")
+
+          (if (== pc 12)
+            (finish))
+            
+          (<= pc (+ pc 4))))))
 
 (module top ()
   (reg clk rst)
@@ -52,19 +81,19 @@
     (dumpvars 0 inst)
 
     (for (i 0) (< i 3) (i (+ i 1))
-        (display "%d:%x" i imem0.data[i])
+        (display "%d:%x" i (ref imem0.data i))
     )
-    (# 200)
+    (delay 200)
     (= rst 0)
 
-    (# 200)
+    (delay 200)
     (= rst 1)
 
-    (# 200)
+    (delay 200)
     (= rst 0)
 
-    (# 200)
+    (delay 200)
 
-    (# 3000)
+    (delay 3000)
     (finish)))
     
