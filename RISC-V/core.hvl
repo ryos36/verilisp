@@ -6,7 +6,26 @@
     `(write ,*start-addr*))
 
 (use mems)
-(make-mem imem 32 "file.hex" :input-format h :n-words 3 :buf-delay 1)
+(make-mem imem 32 "lw.hex" :input-format h :n-words 3 :buf-delay 1)
+(make-mem dmem 32 "lw.hex" :input-format h :n-words 128 :buf-delay 1 :writable t)
+
+(defmacro v_fill (num one_wire)
+  (write-string "{")
+  (write-or-eval num)
+  (write-string "{")
+  (write-or-eval one_wire)
+  (write-string "}")
+  (write-string "}")
+  nil)
+
+(defvar *riscv-inst*
+    '((:LW . "32'bxxxx_xxxx_xxxx_xxxx_x010_xxxx_x000_0011")))
+
+(defmacro risc_inst_const (id)
+    (write-string (cdr (assoc id *riscv-inst*))))
+
+  ;(assign LW 32'bxxxx_xxxx_xxxx_xxxx_x010_xxxx_x000_0011)
+  ;(assign LW 32'bxxxx_xxxx_xxxx_xxxx_x010_xxxx_x000_0011)
 
 (module core
   ((input clk)
@@ -26,7 +45,7 @@
   (wire (5 rs2_addr))
   (wire (5 wb_addr))
 
-  (assign rs1_addr (ref inst 19 5))
+  (assign rs1_addr (ref inst 19 15))
   (assign rs2_addr (ref inst 24 20))
   (assign wb_addr (ref inst 11 7))
 
@@ -35,24 +54,85 @@
   (assign rs1_data (? (== rs1_addr 0) (ref regfile rs1_addr) 0))
   (assign rs2_data (? (== rs2_addr 0) (ref regfile rs2_addr) 0))
 
+  ;----------------------------------------------------------------
+  (wire (12 imm_i))
+  (assign imm_i (ref inst 31 20))
+  (wire (31 imm_i_sext))
+  (assign imm_i_sext (cat (v_fill 20 (ref imm_i 11)) imm_i))
+
+  ;----------------------------------------------------------------
+  (reg (32 alu_out))
+
+  (always (inst)
+    (casex inst
+        ((risc_inst_const :LW) (= alu_out (+ rs1_data imm_i_sext)))
+        ;(default (= alu_out 32'bx))
+        (default (= alu_out (+ rs1_data imm_i_sext)))))
+
+
+  (wire (32 daddr))
+  (wire (32 wb_data))
+  (assign daddr alu_out)
+  (dmem :name dmem0 wb_data (>> daddr 2) wr_data wr_enable clk)
+
+  (reg (32 wr_data))
+  (always (inst)
+    (casex inst
+        ((risc_inst_const :LW) (= wr_data wb_data))
+        (default (= wr_data 32'bx))))
+
+  (reg wr_enable)
+  (always (inst)
+    (casex inst
+        ;((risc_inst_const :LW) (= wr_enable 1))
+        (default (= wr_enable 0))))
+
+  (reg (32 inst_r))
+  (reg (32 wb_addr_r))
+
+  (always ((posedge clk))
+    (<= inst_r inst)
+    (<= wb_addr_r wb_addr))
+
+  (always (inst_r wb_data)
+    (casex inst_r
+        ((risc_inst_const :LW) (= (ref regfile wb_addr_r) wb_data))
+        (default (= wr_data 32'bx))))
+
+  (integer i)
   (always ((posedge clk))
     (if rst
         (<= pc 0)
         (progn
-           
-          (display "pc:%h" pc)
-          (display "inst:%h" inst)
-          (display "rs1_addr:%d" rs1_addr)
-          (display "rs2_addr:%d" rs2_addr)
-          (display "wb_addr:%d" wb_addr)
-          (display "rs1_data:%x" rs1_data)
-          (display "rs2_data:%x" rs2_data)
-          (display "-----------------------")
+         (if (< pc 20)
+          (progn
+           (display "pc:%h" pc)
+           (display "inst:%h" inst)
+           (display "rs1_addr:%d" rs1_addr)
+           (display "rs2_addr:%d" rs2_addr)
+           (display "wb_addr:%d" wb_addr)
+           (display "rs1_data:%x" rs1_data)
+           (display "rs2_data:%x" rs2_data)
+           (display "wb_data:%x" wb_data)
+           (display "imm_i:%x" imm_i)
+           (display "-----------------------")))
 
-          (if (== pc 12)
-            (finish))
+
+         (if (== pc 12)
+          (progn
+           (for (i 0) (< i 32) (i (+ i 1))
+            (display "reg%d:%x" i (ref regfile i)))
+           (finish)))
             
-          (<= pc (+ pc 4))))))
+         (<= pc (+ pc 4)))))
+    (initial
+     (for (i 0) (< i 32) (i (+ i 1))
+        (= (ref regfile i) 0)))
+  ;----------------------------------------------------------------
+  (reg exit_r)
+  (always ((posedge clk))
+    (if (== pc 12)
+        (<= exit_r 1))))
 
 (module top ()
   (reg clk rst)
@@ -66,9 +146,11 @@
   (core :name core0 clk rst addr inst exit)
   (imem :name imem0 inst (>> addr 2))
 
+  #|
   (always ((posedge clk))
     (if (== rst 0)
      (display "%t %x:%x" (time) addr inst)))
+  |#
     
   (integer i j)
   (initial
