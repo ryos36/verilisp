@@ -99,10 +99,15 @@
         ((risc_inst_const :LW) (= (ref regfile wb_addr_r) wb_data))
         (default (= wr_data 32'bx))))
 
-  (integer i)
   (always ((posedge clk))
     (if rst
         (<= pc 0)
+        (progn
+         (<= pc (+ pc 4)))))
+
+  (integer i)
+  (always ((posedge clk))
+    (if (! rst)
         (progn
          (if (< pc 20)
           (progn
@@ -121,18 +126,19 @@
          (if (== pc 12)
           (progn
            (for (i 0) (< i 32) (i (+ i 1))
-            (display "reg%d:%x" i (ref regfile i)))
-           (finish)))
-            
-         (<= pc (+ pc 4)))))
+            (display "reg%d:%x" i (ref regfile i))))))))
+
     (initial
      (for (i 0) (< i 32) (i (+ i 1))
         (= (ref regfile i) 0)))
   ;----------------------------------------------------------------
   (reg exit_r)
+  (assign exit exit_r)
   (always ((posedge clk))
-    (if (== pc 12)
-        (<= exit_r 1))))
+    (if rst
+        (<= exit_r 0)
+        (if (== inst (write-string "{32{1'bx}}"))
+            (<= exit_r 1)))))
 
 (module top ()
   (reg clk rst)
@@ -145,6 +151,10 @@
 
   (core :name core0 clk rst addr inst exit)
   (imem :name imem0 inst (>> addr 2))
+
+  (always (exit)
+    (if (== exit 1)
+     (finish)))
 
   #|
   (always ((posedge clk))

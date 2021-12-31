@@ -1,0 +1,11 @@
+// Hexadecimal values for $readmemh demo
+ // can include comments with double forward slash (standard Verilog comment)
+ // second 32-bit value
+ // third value
+ // etc.
+
+// can break up into related groups, insert comments, etc.
+
+00802303
+14232221
+34333231  // last value
