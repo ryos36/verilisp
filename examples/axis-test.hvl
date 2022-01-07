@@ -38,7 +38,7 @@
       ,@(make-axi-sub tdata_width name))))
 
 (setf *width* 16)
-(make_m main *width* 1)
+(make_m main *width*)
 (make_s sub *width*)
 
 (make_m main2 *width* bbb_)
