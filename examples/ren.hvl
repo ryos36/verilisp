@@ -1,0 +1,79 @@
+(setf *transport-delay* 1)
+(make-prologue)
+
+(setf *aaa* '(0 1 2 3))
+(setf *depth_n* 6)
+(setf *cost_width* 16)
+
+(defmacro make-axis_m0 (name dw)
+  `(module ,name
+      ((input clk)
+       (input rst)
+       (input (,dw cost))
+      )))
+
+(make-axis_m0 axis_m0 96)
+
+(defun do_cost_r (n)
+    (car n)
+    'aaa)
+
+(defmacro fff ()
+ (dolist (i '(a0 a1 a2))
+    (eval `(axis_m0 clk rst ,(symcat i)))))
+    
+(dolist (i (range 10))
+    (eval `(module a ((input clk) (input rst)))))
+
+
+
+(module tb ()
+ (reg clk)
+ (reg rst)
+
+ (always ()
+    (# 5)
+    (= clk (! clk)))
+
+ (reg tready)
+ (wire b e f)
+ (wire (8 d))
+ (reg (96 cost_r))
+ ;(fff)
+ (setf x 0)
+
+ (dolist (i (range *depth_n*))
+    (let ((w_name (symcat "a" i "_w"))
+          (m_name (symcat "axis_m0_" i))
+          (num_m (eval (l_- (l_* 32 (l_+ 1 i)) 1)))
+          (num_n (eval (l_* 32 i))))
+    (eval `(wire (32 ,w_name)))
+    (eval `(assign ,w_name (ref inst ,num_m ,num_n)))
+    (eval `(axis_m0 :name ,m_name clk rst ,w_name))))
+
+ (dolist (i '(a0 a1 a2))
+    (eval `(wire (32 ,(symcat `,i "_w"))))
+    ;(eval `(assign ,(symcat `,i "_w") (ref inst ,(+ x 31) ,x)))
+    (eval `(axis_m0 :name ,(symcat "axis_m0_" `,i) clk rst ,(symcat `,i "_w"))))
+ ;(axis_m0 clk rst b c d e f)
+ (initial
+    (= clk 0)
+    (dumpfile "abc.vcd")
+    (dumpvars 0 dut_axis_m0)
+    (# 200)
+    (= rst 0)
+
+    (# 200)
+    (= rst 1)
+
+    (# 200)
+    (= rst 0)
+
+    (# 200)
+    (= tready 1'b1)
+
+    (# 3000)
+    (finish))
+)
+
+(make-epilogue)
