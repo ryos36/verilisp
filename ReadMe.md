@@ -6,7 +6,7 @@ Original Code is in google code, but it seems it's no longer maintained.
 # Issues
 ## Verilisp is not a compiler
 Detecting syntax errors is missing because of just a translator not a compiler.
-Exection also depends on an exit simulator e.g. iverilog.
+Execution also depends on an exit simulator e.g. iverilog.
 
 ## Non Blocking Assignment(<=)
 n= operator is introduced n= operator for non blocking assignment
