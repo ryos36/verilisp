@@ -1,15 +1,13 @@
-(defmacro make-mem (name word-size input-file
-        &key n-words (input-format 'b) (buf-delay 100) addr-size writable debug-on-write debug (orientation 'word)
-    )
-    (if (not addr-size)
-        (setq addr-size word-size)
-    )
+(defmacro make-mem (name word-size addr-size 
+        &key n-words input-file (input-format :b) (buf-delay 0) (latency 1) writable (write-timing :negedge) debug-on-write debug (orientation :word))
+	(assert (and (<= 0 latency) (<= latency 2)))
+	(assert (xor (= 0 latency) (= buf-delay 0)))
     (if (not n-words)
         ; by default, allow for as much space as possible
         (setq n-words (1<< addr-size))
     )
     `(v_module ,name (
-            (output (,word-size out))
+            (output (,word-size rd_data))
             (input
                 (,addr-size addr)
                 ,@(if writable
@@ -22,23 +20,36 @@
             )
         )
         (v_reg
-            (,word-size temp)
-            (,(if (equal orientation 'byte) 8 word-size)
+            (,word-size data_r)
+            (,(if (equal orientation :byte) 8 word-size)
                 (,n-words
                     data
                 )
             )
         )
+		,(if (= latency 2)
+			`(v_reg
+				(,word-size data_rr)))
+			
+		(v_wire (,word-size rd_data_w))
         ,@(foreach i (range word-size)
             `(v_buf
                 ,buf-delay
-                (v_ref out ,i)
-                (v_ref temp ,i)
+                (v_ref rd_data ,i)
+                (v_ref rd_data_w ,i)
             )
         )
-        (v_always (addr)
-            (v_= temp
-                ,(if (equal orientation 'byte)
+
+		,(case latency
+			(0 `(v_assign rd_data_w data_r)) ;async
+			(1 `(v_assign rd_data_w data_r))
+			(2 `(v_assign rd_data_w data_rr)))
+
+        (v_always (,(if (eq latency 0) 'addr '(posedge clk)))
+            ,(if (eq latency 2) `(v_<= data_rr data_r))
+
+            (,(if (= latency 0) 'v_=  'v_<=) data_r
+                ,(if (equal orientation :byte)
                     `(v_cat
                         ,@(foreach i (range (/ word-size 8))
                             `(v_ref data (v_+ addr ,i))
@@ -50,7 +61,7 @@
         )
         ,(if writable
             `(v_always (
-                    (negedge clk)
+                    (,(if (and (= latency 0) (eq write-timing :negedge)) 'negedge 'posedge) clk)
                 )
                 ,(if debug
                     `(v_display
@@ -71,7 +82,7 @@
                                 wr_data
                             )
                         )
-                        ,(if (equal orientation 'byte)
+                        ,(if (equal orientation :byte)
                             `(progn
                                 ,@(foreach i (range (/ word-size 8))
                                     `(v_=
@@ -97,7 +108,7 @@
         )
         ,(if input-file
             `(v_initial
-                (,(if (eq input-format 'h)
+                (,(if (eq input-format :h)
                         'v_readmemh
                         'v_readmemb
                     )

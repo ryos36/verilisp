@@ -11,7 +11,7 @@
 
 (defparameter *timescale* '(1000 1))
 (defparameter *nettype-prologue* "none")
-(defparameter *nettype-epilogue* nil)
+(defparameter *nettype-epilogue* "wire")
 (defparameter *transport-delay* nil)
 (defparameter *inertial-delay* nil)
 
