@@ -8,12 +8,15 @@ Original Code is in google code, but it seems it's no longer maintained.
 Detecting syntax errors is missing because of just a translator not a compiler.
 Execution also depends on an exit simulator e.g. iverilog.
 
-## Non Blocking Assignment(<=)
+## Non Blocking Assignment(n= <=#)
 n= operator is introduced for non blocking assignment
-to avoid conflict with less than operator in original verilisp.
-Now you can use '<=' lisp function for non blocking assignment
+to avoid conflict with less than or equal operator in original verilisp.
+Now you can use '<=#' lisp function for non blocking assignment
 with transport-delay.
-If you want to use less than operator, Please use '%<=' or '=<'.
+
+## Less Than or equal operator Assignment(<=)
+<= is a less than operator not assignment operator.
+Also you can use '%<=' or '=<' as less than or equal operator, but it's experimental.
 
 ## Expressions about Hex and Bin
 Expressions about numeric in Verilog-HDL is very useful. 

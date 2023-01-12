@@ -1300,7 +1300,7 @@
     (write-string ";")
 )
 
-(defmacro v_<= (lvalue expr &optional 
+(defmacro v_<=# (lvalue expr &optional 
                        (transport-delay *transport-delay*)
                        (inertial-delay *inertial-delay*))
     (nli)
@@ -1313,6 +1313,7 @@
     (write-or-eval expr)
     (write-string ";")
 )
+
 
 (defmacro v_deassign (&rest lvalues)
     (nli)
@@ -1649,7 +1650,7 @@
 
 (foreach name_ '(
         + - ~& & && * / % // < > << >> >>> <<< == != === !== ^~ ~^ ^ ! ~
-        >=
+        >= <=
         (%<= "<=")
         (=< "<=")
         (bitwise-or "|")

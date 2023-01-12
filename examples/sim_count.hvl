@@ -13,11 +13,11 @@
   (assign test_w (format t "12'h~a" (tobase 333 16)))
 
   (always ((posedge clk))
-    (<= debug_v_d debug_v)
+    (<=# debug_v_d debug_v)
     (if (!= debug_v debug_v_d)
       (progn
        (display "%t %d %d" (time) debug_v_d (+ count 1))
-       (<= count 0))
+       (<=# count 0))
       (++ count))))
 
 (make-epilogue)

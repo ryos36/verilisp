@@ -11,8 +11,11 @@
 
   (assign debug_v_d (format t "4'h~a" (tobase 333 16)))
   (always ((posedge clk))
-    (<= debug_v_d debug_v)
-    (n= debug_v_d debug_v) ; original style
+    (if (<= debug_v (+ 16\'h1234 (h 16 1234)))
+     (progn
+      (v_<=# debug_v_d debug_v)
+      (n= debug_v_d debug_v) ; original style
+     ))
   ))
 
 ================================================================================
@@ -27,7 +30,13 @@ module sim_count(clk, debug_v);
     always
         @(posedge clk)
     begin
-        debug_v_d <= #1 debug_v;
-        debug_v_d <= debug_v;
+        if ((debug_v <= (16'h1234 + 16'h1234)))
+        begin
+            debug_v_d <= #1 debug_v;
+            debug_v_d <= debug_v;
+        end
+        else
+        begin
+        end
     end
 endmodule

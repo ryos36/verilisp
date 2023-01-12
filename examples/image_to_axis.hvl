@@ -66,36 +66,36 @@
         (always ((posedge clk))
           (if (== rst 1'b1) 
             (progn
-              (<= hcount 12'd0)
-              (<= vcount 12'd0)
-              (<= tvalid_r 1'b0)
-              (<= tuser_r 1'b0)
-              (<= tlast_r 1'b0)
-              (<= image_count 12'd0))
+              (<=# hcount 12'd0)
+              (<=# vcount 12'd0)
+              (<=# tvalid_r 1'b0)
+              (<=# tuser_r 1'b0)
+              (<=# tlast_r 1'b0)
+              (<=# image_count 12'd0))
             (progn
               (if (== init_done 1'b0) 
                 (progn 
                   (display "Fatal Error")
                   (finish)))
               (if (== tvalid_r 1'b0) 
-                (<= tvalid_r 1'b1)
+                (<=# tvalid_r 1'b1)
                 (progn
                   (if (== tready 1'b1)
                     (progn
-                      (<= tlast_r 1'b0)
-                      (<= hcount 12'd0)
+                      (<=# tlast_r 1'b0)
+                      (<=# hcount 12'd0)
                       (if (== vcount height)
                         (progn
-                          (<= vcount 12'd0)
-                          (<= tuser_r 1'b1)
-                          (<= image_count 12'd0))
+                          (<=# vcount 12'd0)
+                          (<=# tuser_r 1'b1)
+                          (<=# image_count 12'd0))
                         (++ image_count))
                       (progn
                         (++ image_count))))
                   (if (== hcount (- width 2))
                     (progn
                       (++ vcount)
-                      (<= tlast_r 1'b1))))))))))
+                      (<=# tlast_r 1'b1))))))))))
 
 (make_image_to_axis axis_m0 "multiplier.v" 512)
 

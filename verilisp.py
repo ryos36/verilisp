@@ -20,7 +20,7 @@ ENABLE_SECRET_BACKQUOTE_PROGN = True
 TEST_ON_ARGLESS = True
 NAMES_TO_MANGLE = [
     # special forms
-     '@', 'fork', 'release', 'assign', 'deassign', 'task', 'function', '=', 'n=', '<=', 
+     '@', 'fork', 'release', 'assign', 'deassign', 'task', 'function', '=', 'n=',
     'delay', '#', 'wait', 'if', 'module', 'always', 'initial', 'cat', '.',
     'primitive', 'table', 'for', 'fromto', 'forallbits', 'ref', 'comment',
     'b', 'd', 'h', 'o',
@@ -65,6 +65,9 @@ NAMES_TO_MANGLE = [
     '+', '-', '++', '--', '~&', '&', '?', '&&', '*', '/', '//', '%', '<<', '>>', '>', '<', 
     '>>>', '<<<', '==', '!=', '===', '!==', '^', '^~', '~^', '>=', '!',
     '+=', '-=', '*=', '/=', '^=', '%=', '&=', 'bor=', 'lor=',
+
+    # math operator, not assign operator
+    '<=',
 
     # special math operators
     '%<=', '=<',
