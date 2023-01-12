@@ -1648,7 +1648,10 @@
 )
 
 (foreach name_ '(
-        + - ~& & && * / % < > << >> >>> <<< == != === !== ^~ ~^ ^ ! ~
+        + - ~& & && * / % // < > << >> >>> <<< == != === !== ^~ ~^ ^ ! ~
+        >=
+        (%<= "<=")
+        (=< "<=")
         (bitwise-or "|")
         (bitwise-nor "~|")
         (bitwise-and "&")
@@ -1754,13 +1757,13 @@
     )
 )
 
-
 (defmacro v_timescale (x)
     (nli)
     (write-string "`timescale ")
     (write-string x)
     nil
 )
+
 (defmacro v_include (&rest filenames)
     (foreach filename filenames
         (nli)

@@ -97,7 +97,7 @@
                                     )
                                 )
                             )
-                            `(v_=
+                            `(v_<=
                                 (v_ref data addr)
                                 wr_data
                             )

@@ -1,2 +1,3 @@
+(setq *transport-delay* 1)
 (use mems)
-(make-mem imem 32 "file.hex" :input-format 'h)
+(make-mem imem 32 10 :input-file "file.hex" :input-format :h)

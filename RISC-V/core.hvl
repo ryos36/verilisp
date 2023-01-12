@@ -6,8 +6,8 @@
     `(write ,*start-addr*))
 
 (use mems)
-(make-mem imem 32 "lw.hex" :input-format h :n-words 3 :buf-delay 1)
-(make-mem dmem 32 "lw.hex" :input-format h :n-words 128 :buf-delay 1 :writable t)
+(make-mem imem 32 10 :input-file "lw.hex" :input-format h :n-words 3 :buf-delay 1)
+(make-mem dmem 32 10 :input-file "lw.hex" :input-format h :n-words 128 :buf-delay 1 :writable t)
 
 (defmacro v_fill (num one_wire)
   (write-string "{")
@@ -70,7 +70,7 @@
         (default (= alu_out (+ rs1_data imm_i_sext)))))
 
 
-  (wire (32 daddr))
+  (wire (12 daddr))
   (wire (32 wb_data))
   (assign daddr alu_out)
   (dmem :name dmem0 wb_data (>> daddr 2) wr_data wr_enable clk)
@@ -88,7 +88,7 @@
         (default (= wr_enable 0))))
 
   (reg (32 inst_r))
-  (reg (32 wb_addr_r))
+  (reg (12 wb_addr_r))
 
   (always ((posedge clk))
     (<= inst_r inst)
