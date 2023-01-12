@@ -1,5 +1,6 @@
 (reg a)
 (reg (8 aa))
+(reg (8 (4 ax)))
 (reg (8 (4 aaa aab) ab) aba)
 (wire b)
 (wire (3 bb))
@@ -9,12 +10,24 @@
 (parameter ff 8)
 (parameter ffg 9)
 (trireg g)
+(reg= x 4)
+(reg= x0 (+ 5 4))
+(reg= x1 (+ ff 4))
+(reg (ff ffaa))
+(reg ((+ 3 4) ffab))
+(reg= x2 (h 8 fe))
+(reg= (8 y) (h 8 fe))
+; SystemVerilog so not support officially
+;(reg= (8 (3 y)) ((h 8 ab) (h 8 fe) (h 8 cd) (h 8 ef) (h 8 01) (h 8 23) (h 8 67) (h 8 45)))
+;   reg [7 : 0] y [2 : 0] = '{ 8'hab, 8'hfe, 8'hcd, 8'hef, 8'h1, 8'h23, 8'h67, 8'h45};
+(reg (3 HD_valid_r))
 
 ================================================================================
 
 module _$_;
     reg a;
     reg [7 : 0] aa;
+    reg [7 : 0] ax [3 : 0];
     reg [7 : 0] aaa [3 : 0];
     reg [7 : 0] aab [3 : 0];
     reg [7 : 0] ab;
@@ -29,4 +42,12 @@ module _$_;
     parameter ff = 8;
     parameter ffg = 9;
     trireg g;
+    reg x = 4;
+    reg x0 = (5 + 4);
+    reg x1 = (ff + 4);
+    reg [(ff - 1) : 0] ffaa;
+    reg [((3 + 4) - 1) : 0] ffab;
+    reg x2 = 8'hfe;
+    reg [7 : 0] y = 8'hfe;
+    reg [2 : 0] HD_valid_r;
 endmodule

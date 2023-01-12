@@ -1567,6 +1567,63 @@
     nil
 )
 
+(defmacro v_reg= (name value)
+    (check-in-module)
+    (if (atom name)
+        (progn
+            (nli)
+            (write-all "reg " name " = ")
+            (if (atom value)
+              (write value)
+              (eval value))
+            (write-string ";"))
+
+        (let ((bus-width (car name))
+              (bus-name (cadr name)))
+
+          (if (atom bus-name)
+            (progn
+              ; 1d busses
+              (nli)
+              (write-string "reg [")
+
+              (if (numberp bus-width)
+                (write (- bus-width 1))
+
+                (eval `(v_- ,bus-width 1)))
+              (write-all " : 0] " bus-name " = ")
+              (if (atom value)
+                (write value)
+                (eval value))
+              (write-string ";"))
+
+            (let ((bus-array-n (car bus-name))
+                  (bus-name (cadr bus-name))) ; // tricky?
+
+              ; 2d busses
+              (nli)
+              (write-string "reg [")
+              (if (numberp bus-width)
+                (write (- bus-width 1))
+                (eval `(v_- ,bus-width 1)))
+
+              (write-all " : 0] " bus-name " [")
+              (if (numberp bus-array-n)
+                (write (- bus-array-n 1))
+                (eval `(v_- ,bus-array-n 1)))
+              (write-string " : 0] = '{")
+              (let ((del " "))
+                (dolist (v value)
+                  (write-string del)
+                  (if (atom v)
+                    (write v)
+                    (eval v))
+                  (setf del ", ")))
+
+              (write-string "};")))))
+    nil
+)
+
 (defmacro v_always (signals &rest body)
     (check-in-module)
     (nli)

@@ -57,6 +57,7 @@ NAMES_TO_MANGLE = [
     
     # type declarators
     'wire', 'wand', 'wor', 'reg', 'trireg', 'integer', 'parameter',
+    'reg=',
     
     # backquote macros
     'include', 'define', 'timescale',
