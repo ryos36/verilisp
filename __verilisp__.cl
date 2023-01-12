@@ -1949,9 +1949,19 @@
                 (nli)
                 (write-or-eval (car case-part))
                 (write-string ":")
-                (++indent)
-                (eval-all (cdr case-part))
-                (--indent)
+                (let* ((remain (cdr case-part))
+                       (flag-n (> (length remain) 1)))
+                  (if flag-n
+                    (write-string " begin"))
+
+                  (++indent)
+                  (eval-all (cdr case-part))
+                  (--indent)
+
+                  (when flag-n
+                      (nli)
+                      (write-string "end"))
+                )
             )
             (--indent)
             (nli)
