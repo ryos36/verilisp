@@ -35,8 +35,5 @@ module sim_count(clk, debug_v);
             debug_v_d <= #1 debug_v;
             debug_v_d <= debug_v;
         end
-        else
-        begin
-        end
     end
 endmodule

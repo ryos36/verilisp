@@ -1,0 +1,115 @@
+(defparameter *clock-period* 10)
+(setf *transport-delay* 1)
+(make-prologue)
+
+(use clocks)
+
+(defmacro inc (sym)
+    `(<=# ,sym (+ ,sym 1)))
+
+(defmacro dolist-num (array-name lst)
+ `(let ((i 0) rv)
+     (dolist (e ,lst)
+      (push `(assign (ref ,,array-name ,i) ,e) rv)
+      (incf i))
+     (nreverse rv)))
+
+(defmacro make-timing-generator-module (module-name h-list v-list)
+    (let ((h-active (nth 0 h-list))
+           (h-fp (nth 1 h-list))
+           (h-sp (nth 2 h-list))
+           (h-bp (nth 3 h-list))
+           (v-active (nth 0 v-list))
+           (v-fp (nth 1 v-list))
+           (v-sp (nth 2 v-list))
+           (v-bp (nth 3 v-list)))
+        `(module ,module-name 
+            ((input clk)
+             (input rst)
+
+             (output hsync)
+             (output vsync))
+
+          (reg= hsync_r 0)
+          (assign hsync hsync_r)
+          (reg= vsync_r 0)
+          (assign vsync vsync_r)
+
+          (reg= (5 status) 0)
+
+          (reg (12 (4 h_list)))
+          #|
+          (assign (ref h_list 0) ,h-active)
+
+          ,@(let ((i 0) rv)
+              (dolist (e h-list)
+                (push `(assign (ref h_list ,i) ,e) rv)
+                (incf i))
+                (nreverse rv))
+          |#
+
+          ,@(dolist-num 'h_list h-list)
+          ,@(dolist-num 'v_list v-list)
+
+          ;(assign (ref h_list 0) ,(nth 0 h-list))
+
+          (reg= (12 hcount) 0)
+          (reg (11 (4 v_list)))
+          (reg= (11 vcount) 0)
+
+          (always ((posedge clk))
+            (case status
+                (0
+                    (<=# hcount 0)
+                    (<=# vcount 0)
+                    (<=# status 1))
+
+                (1
+                    (<=# status 2))
+
+                (2
+                    (if (== hcount (- (ref h_list 0) 1))
+                      ((<=# status 3)
+                        (<=# hcount 0)
+                        (<=# vcount 0))
+                      (inc hcount)))
+
+                (default 
+                    (display "hello"))))
+
+          )))
+
+(make-timing-generator-module tgen (640 16 96 48) (480 11 2 31))
+
+(module tb ()
+ (reg clk)
+ (reg rst)
+
+ (always ()
+    (# 5)
+    (= clk (! clk)))
+
+ (wire hsync vsync)
+
+ (tgen :name tgen0 clk rst hsync vsync)
+ (initial
+    (= clk 0)
+    (dumpfile "tgen.vcd")
+    (dumpvars 0 tgen0)
+    (# 200)
+    (= rst 0)
+
+    (# 200)
+    (= rst 1)
+
+    (# 200)
+    (= rst 0)
+
+    (# 200)
+    ;(= tready 1'b1)
+
+    (# 3000)
+    (finish))
+)
+
+(make-epilogue)

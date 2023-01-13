@@ -24,6 +24,8 @@ NAMES_TO_MANGLE = [
     'delay', '#', 'wait', 'if', 'module', 'always', 'initial', 'cat', '.',
     'primitive', 'table', 'for', 'fromto', 'forallbits', 'ref', 'comment',
     'b', 'd', 'h', 'o',
+
+    '<=#', 
     
     # cases
     'case', 'cond', 'casex', 'casez',
