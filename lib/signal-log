@@ -1,0 +1,90 @@
+(make-prologue)
+
+(defparameter *signal-log-suffix* ".slog")
+(defmacro inc (sym)
+    `(v_<=# ,sym (v_+ ,sym 1)))
+
+(defmacro make-signal-log (name width &optional file-name)
+    ;(let ((file-name (if (null file-name) (concatenate 'string (symbol-name name) *signal-log-suffix*) file-name)))
+        `(v_module ,name ((input clk) (input (,width ,name)) (input finished))
+
+            (v_initial
+              (v_display "[ (:" ,(symbol-name name) " ." ,width " )"))
+            (v_reg (,width probe_signal_r))
+            (v_reg (,width probe_signal_rr))
+            (v_reg= (2 finished_r) 0)
+            (v_reg= (32 count) 0)
+            (v_always ((posedge clk))
+                (v_<=# probe_signal_rr probe_signal_r)
+                (v_<=# probe_signal_r ,name)
+                (v_if (v_== probe_signal_r probe_signal_rr)
+                    (inc count)
+                    (v_if (v_== finished_r 0)
+                      ((v_display "(%d . #x%x)" count probe_signal_rr)
+                       (v_<=# count 0)))))
+            (v_always ((posedge clk))
+                (v_case finished_r
+                    (0
+                        (v_if (v_== finished 1)
+                          (v_<=# finished_r 1)))
+                    (1
+                      (v_display "(%d . #h%x)" count probe_signal_rr)
+                      (v_display "]")
+                      (v_<=# finished_r 2))
+                    (default
+                        ; nothing to do
+                        (v_<=# finished_r finished_r)
+                        ))))
+                ;)
+                )
+
+(when (eq *__name__* :__main__)
+    (make-signal-log data16 16)
+
+    (module tb ()
+     (reg clk)
+     (reg rst)
+
+     (always ()
+        (nli)
+        (# 5)
+        (= clk (! clk)))
+
+     (wire hsync vsync)
+     (reg= (16 probe) 0)
+     (reg= finished 0)
+
+     (data16 :name data16 clk probe finished)
+     (initial
+        (dumpfile "data16.vcd")
+        (dumpvars 0 data16)
+
+        (= clk 0)
+        (# 200)
+        (= rst 0)
+
+        (# 200)
+        (= rst 1)
+
+        (# 200)
+        (= rst 0)
+
+        (# 200)
+        (= probe 1)
+
+        (# 4000)
+        (= rst 0)
+
+        (# 200)
+        (= probe 0)
+
+        (# 200)
+        (= finished 1)
+
+        (# 200)
+        (= probe 1)
+
+        (# 200)
+        (finish))))
+
+(make-epilogue)

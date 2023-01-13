@@ -843,9 +843,9 @@
 (defmacro use (package-name)
     (if (contains *used* package-name)
         nil
-        (progn
+        (let ((*__name__* nil))
             (setq *used* (cons package-name *used*))
-            `(progn
+            `(let ((*__name__* nil))
                 ,@(read-all
                     (find-verilisp-package
                         (string package-name)

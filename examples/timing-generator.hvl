@@ -2,10 +2,44 @@
 (setf *transport-delay* 1)
 (make-prologue)
 
-(use clocks)
-
 (defmacro inc (sym)
     `(<=# ,sym (+ ,sym 1)))
+
+#|
+(defmacro make-signal-log (name width &optional file-name)
+    ;(let ((file-name (if (null file-name) (concatenate 'string (symbol-name name) *signal-log-suffix*) file-name)))
+        `(module ,name ((input clk) (input (,width ,name)) (input finished))
+
+            (initial
+              (display "[ (:" ,(symbol-name name) " ." ,width " )"))
+            (reg (,width probe_signal_r))
+            (reg (,width probe_signal_rr))
+            (reg= (2 finished_r) 0)
+            (reg= (32 count) 0)
+            (always ((posedge clk))
+                (<=# probe_signal_rr probe_signal_r)
+                (<=# probe_signal_r ,name)
+                (if (== probe_signal_r probe_signal_rr)
+                    (inc count)
+                    (if (== finished_r 0)
+                      ((display "(%d . #x%x)" count probe_signal_rr)
+                       (<=# count 0)))))
+            (always ((posedge clk))
+                (case finished_r
+                    (0
+                        (if (== finished 1)
+                          (<=# finished_r 1)))
+                    (1
+                      (display "(%d . #h%x)" count probe_signal_rr)
+                      (display "]")
+                      (<=# finished_r 2))
+                    (default
+                        ; nothing to do
+                        (<=# finished_r finished_r)
+                        ))))
+                ;)
+                )
+|#
 
 (defmacro dolist-num (array-name lst)
  `(let ((i 0) rv)
@@ -68,6 +102,7 @@
       ))
 
 (when (eq *__name__* :__main__)
+    (use signal-log)
     (make-timing-generator-module tgen (640 16 96 48) (480 11 2 31))
     (make-signal-log data1 1)
 
