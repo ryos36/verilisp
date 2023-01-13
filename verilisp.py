@@ -2,6 +2,7 @@
 ''' a script for converting verilisp '.vl' files into verilog code using the Common Lisp script 'verilisp.cl'.
 '''
 import os, sys, re, difflib
+import subprocess
 
 usage = '''
     $ python verilisp.py 1.hvl
@@ -110,23 +111,21 @@ def mangle(code):
     code = re.sub(r"([0-9]+)'", r"\g<1>\'", code)
     return code
 
-def backquote_progn(s):
+def backquote_let__main__(s):
     ''' let you comma outside backquote, so you don't need to use eval or defmacro explicitly.
     '''
     if ENABLE_SECRET_BACKQUOTE_PROGN:
-        return f'(eval `(progn {s}))'
+        return f'(eval `(let ((*__name__* :__main__)) {s}))'
     else:
         return s
 
 def translate(vl_code):
-    import subprocess
-
     p = subprocess.Popen(VERILISP_CMD, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, close_fds=True)
     i, o = p.stdin, p.stdout
     vl_code = f'(add-verilisp-path "{__dir__}/lib/")' + vl_code
     i.write(
         (
-        backquote_progn(
+        backquote_let__main__(
             mangle(vl_code)
         )
         + '\n(__end__)\n'
