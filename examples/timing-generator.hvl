@@ -102,7 +102,7 @@
       ))
 
 (when (eq *__name__* :__main__)
-    (use signal-log)
+    (use sl)
     (make-timing-generator-module tgen (640 16 96 48) (480 11 2 31))
     (make-signal-log data1 1)
 

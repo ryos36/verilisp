@@ -14,11 +14,12 @@ usage = '''
 __dir__ = os.path.dirname(os.path.abspath(__file__))
 
 VERILISP_CMD = 'clisp -modern ' + os.path.join(__dir__, '__verilisp__.cl')
+ONLY_MANGLE_MODE = False
 DIFFER = difflib.unified_diff
 MANGLER = 'v_'    # must match 'verilog-name-mangle' in verilisp.cl
 ANTIMANGLER = 'l_'    # let you use lisp's 'and', etc. as 'l_and'
 ENABLE_SECRET_BACKQUOTE_PROGN = True
-TEST_ON_ARGLESS = True
+TEST_ON_ARGLESS = False
 NAMES_TO_MANGLE = [
     # special forms
      '@', 'fork', 'release', 'assign', 'deassign', 'task', 'function', '=', 'n=',
@@ -120,6 +121,8 @@ def backquote_let__main__(s):
         return s
 
 def translate(vl_code):
+    if ONLY_MANGLE_MODE:
+        return mangle(vl_code)
     p = subprocess.Popen(VERILISP_CMD, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, close_fds=True)
     i, o = p.stdin, p.stdout
     vl_code = f'(add-verilisp-path "{__dir__}/lib/")' + vl_code
@@ -192,14 +195,19 @@ def main(argv):
     if '-' in argv:
         interactive_interpret()
     elif argv:
+        EXT= '.v'
         for arg in argv:
             if arg in ['-h', '--help', '-H']:
                 print(usage)
+            elif arg == '--mangle':
+                global ONLY_MANGLE_MODE
+                ONLY_MANGLE_MODE = True
+                EXT = '.hvlib'
             elif arg == '-t':
                 test()
             elif os.path.isfile(arg):
                 with open(arg, mode='r') as in_f:
-                    with open(os.path.splitext(arg)[0] + '.v', 'w') as out_f:
+                    with open(os.path.splitext(arg)[0] + EXT, 'w') as out_f:
                         out_f.write(translate(in_f.read()))
     elif TEST_ON_ARGLESS:
         test()
