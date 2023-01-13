@@ -135,6 +135,9 @@ def translate(vl_code):
         ).encode('utf-8')
     )
     i.close()
+    p.wait()
+    if p.returncode != 0:
+        raise Exception
     return o.read().decode('utf-8')
 
 TEST_DIVIDER = '\n%s\n' % ('=' * 80)    # in files in the tests directory, separates the verilisp code from the equivalent verilog code
@@ -206,9 +209,14 @@ def main(argv):
             elif arg == '-t':
                 test()
             elif os.path.isfile(arg):
-                with open(arg, mode='r') as in_f:
-                    with open(os.path.splitext(arg)[0] + EXT, 'w') as out_f:
-                        out_f.write(translate(in_f.read()))
+                filename=os.path.splitext(arg)[0] + EXT
+                try:
+                    with open(arg, mode='r') as in_f:
+                        with open(filename, 'w') as out_f:
+                            out_f.write(translate(in_f.read()))
+                except:
+                    os.remove(filename)
+                    
     elif TEST_ON_ARGLESS:
         test()
     else:
