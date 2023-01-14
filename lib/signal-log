@@ -4,7 +4,7 @@
 (defmacro inc (sym)
     `(v_<=# ,sym (v_+ ,sym 1)))
 
-(defmacro make-signal-log (name width &optional file-name)
+(defmacro make-signal-log (name &optional (width 1) file-name)
     ;(let ((file-name (if (null file-name) (concatenate 'string (symbol-name name) *signal-log-suffix*) file-name)))
         `(v_module ,name ((input clk) (input (,width ,name)) (input finished))
 

@@ -5,42 +5,6 @@
 (defmacro inc (sym)
     `(<=# ,sym (+ ,sym 1)))
 
-#|
-(defmacro make-signal-log (name width &optional file-name)
-    ;(let ((file-name (if (null file-name) (concatenate 'string (symbol-name name) *signal-log-suffix*) file-name)))
-        `(module ,name ((input clk) (input (,width ,name)) (input finished))
-
-            (initial
-              (display "[ (:" ,(symbol-name name) " ." ,width " )"))
-            (reg (,width probe_signal_r))
-            (reg (,width probe_signal_rr))
-            (reg= (2 finished_r) 0)
-            (reg= (32 count) 0)
-            (always ((posedge clk))
-                (<=# probe_signal_rr probe_signal_r)
-                (<=# probe_signal_r ,name)
-                (if (== probe_signal_r probe_signal_rr)
-                    (inc count)
-                    (if (== finished_r 0)
-                      ((display "(%d . #x%x)" count probe_signal_rr)
-                       (<=# count 0)))))
-            (always ((posedge clk))
-                (case finished_r
-                    (0
-                        (if (== finished 1)
-                          (<=# finished_r 1)))
-                    (1
-                      (display "(%d . #h%x)" count probe_signal_rr)
-                      (display "]")
-                      (<=# finished_r 2))
-                    (default
-                        ; nothing to do
-                        (<=# finished_r finished_r)
-                        ))))
-                ;)
-                )
-|#
-
 (defmacro dolist-num (array-name lst)
  `(let ((i 0) rv)
      (dolist (e ,lst)
@@ -75,6 +39,10 @@
       (wire (12 cur_h_list))
       (assign cur_h_list (ref h_list cur_h_state))
 
+      (reg= (2 cur_v_state) 0)
+      (wire (12 cur_v_list))
+      (assign cur_v_list (ref v_list cur_v_state))
+
       (always ((posedge clk))
         (case status
             (0
@@ -87,13 +55,21 @@
 
             (2
                 (if (== hcount (- cur_h_list 1))
-                  ((inc cur_h_state)
+                  ((if (== cur_h_state 1)
+                    ((if (== vcount (- cur_v_list 1))
+                      ((if (== cur_v_state 1)
+                        (<=# vsync_r 1)
+                        (<=# vsync_r 0))
+                       (display cur_v_state)
+                       (inc cur_v_state)
+                       (<=# vcount 0))
+
+                      (inc vcount))
+                    (<=# hsync_r 1))
+                    (<=# hsync_r 0))
+                   (inc cur_h_state)
                    ;(<=# status 3)
-                   (<=# hcount 0)
-                   (<=# vcount 0)
-                   (if (== cur_h_state 1)
-                    (<=# hsync_r 1)
-                    (<=# hsync_r 0)))
+                   (<=# hcount 0))
                   (inc hcount)))
 
             (default 
@@ -102,9 +78,9 @@
       ))
 
 (when (eq *__name__* :__main__)
-    (use sl)
+    (use signal-log)
     (make-timing-generator-module tgen (640 16 96 48) (480 11 2 31))
-    (make-signal-log data1 1)
+    (make-signal-log data1)
 
     (module tb ()
      (reg clk)
@@ -118,7 +94,7 @@
      (reg= (16 count) 0)
      (reg= finished 0)
 
-     (data1 :name data1 clk hsync finished)
+     (data1 :name data1 clk vsync finished)
      (tgen :name tgen0 clk rst hsync vsync)
      (initial
         (= clk 0)
@@ -136,11 +112,12 @@
         (# 200)
         ;(= tready 1'b1)
         (display (. tgen0 hcount))
-        (v_while (== hsync 0)
+        (v_while (== vsync 0)
             (# 10)
             (inc count)
-            (display count (. tgen0 hcount)))
-        (v_while (== hsync 1)
+            ;(display count (. tgen0 hcount))
+            )
+        (v_while (== vsync 1)
             (# 10)
             (= rst 0))
 
