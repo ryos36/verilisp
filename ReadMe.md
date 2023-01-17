@@ -18,10 +18,3 @@ with transport-delay.
 <= is a less than operator not assignment operator.
 Also you can use '%<=' or '=<' as less than or equal operator, but it's experimental.
 
-## Expressions about Hex and Bin
-Expressions about numeric in Verilog-HDL is very useful. 
-You can use in your verilisp program, but it's not elegant.
-
-```
-(b 1 1) -> 1'b1
-```

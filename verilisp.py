@@ -220,7 +220,6 @@ def main(argv):
                 filename=os.path.splitext(arg)[0] + EXT
                 if DIR != None:
                     filename = DIR + '/' + filename
-                print(filename)
                 try:
                     with open(arg, mode='r') as in_f:
                         with open(filename, 'w') as out_f:

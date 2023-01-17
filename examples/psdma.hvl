@@ -1,0 +1,204 @@
+(make-prologue)
+(defparameter *DQ_WIDTH* 16)
+(defparameter *ADDR_WIDTH* 21)
+(defparameter *DATA_WIDTH* (l_* 4 *DQ_WIDTH*))
+(defparameter *DATA_MASK_WIDTH* (l_/ *DATA_WIDTH* 8))
+
+(defun make-axis-sub (tdata-width &optional (axi-name ""))
+      (copy-tree
+        `((input ,(symcat axi-name 'tvalid))
+          (output ,(symcat axi-name 'tready))
+          (input (,tdata-width ,(symcat axi-name 'tdata)))
+          (input ,(symcat axi-name 'tuser))
+          (input ,(symcat axi-name 'tlast)))))
+
+(defun make-axis-main (tdata-width &optional (axi-name ""))
+      (copy-tree
+        `((output ,(symcat axi-name 'tvalid))
+          (input ,(symcat axi-name 'tready))
+          (output (,tdata-width ,(symcat axi-name 'tdata)))
+          (output ,(symcat axi-name 'tuser))
+          (output ,(symcat axi-name 'tlast)))))
+
+(defun make-axis-main-reg (axi-name tdata-width)
+      (copy-tree
+        `((reg= ,(symcat axi-name 'tvalid_r) 0)
+          (reg= (,tdata-width ,(symcat axi-name 'tdata_r)) (h 32 xxxx_xxxx))
+          (reg ,(symcat axi-name 'tuser_r))
+          (reg ,(symcat axi-name 'tlast_r))
+
+
+          ,@(mapcar #'(lambda (x) 
+                  `(assign ,(symcat axi-name x) ,(symcat axi-name x '_r)))
+                  '(tvalid tdata tuser tlast)))))
+
+(defun make-read-if (name data-width addr-width &optional use-for-video)
+    (copy-tree
+        `((input (,addr-width ,(symcat name 'addr)))
+          (input ,(symcat name 'bytes))
+          (input ,(symcat name 'req))
+          (output ,(symcat name 'req_ack))
+          (output ,(symcat name 'finished))
+          (input ,(symcat name 'finished_ack))
+
+          (input ,(symcat name 'almost_full_i))
+
+          ,(l_if use-for-video `(input ,(symcat name 'is_first_line)))
+
+          ,@(make-axis-main data-width name))))
+
+(defun make-write-if (name data-width addr-width)
+    (copy-tree
+        `((input (,addr-width ,(symcat name 'addr)))
+          (input ,(symcat name 'bytes))
+          (input ,(symcat name 'req))
+          (output ,(symcat name 'req_ack))
+          (output ,(symcat name 'finished))
+          (input ,(symcat name 'finished_ack))
+
+          ,@(make-axis-sub data-width name))))
+
+(defmacro make-psdma-module (module-name &optional (beat-n 32) (read-latency 16) (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
+  (let ((one-read-bytes (l_* (l_/ data-width 8) beat-n))
+        (read-latency-bit-width (floor (l_log read-latency) (l_log 2.0)))
+        (beat-n-bit-width (floor (l_log beat-n) (l_log 2.0))))
+    `(module ,module-name 
+        ((input clk)
+         (input rst)
+
+         ;interface for PSRAM
+         (input init_calib_i)
+         (input (,data-width rd_data_i))
+         (input rd_data_valid_i)
+
+         (output wr_data_o)
+         (output wr_data_mask_o)
+         (output data_mask_o) ; for write?
+
+         (output (,addr-width) addr_o)
+         (output cmd_o)
+         (output cmd_en_o)
+
+        ,@(make-read-if 'read_ data-width addr-width :use-for-video)
+        ,@(make-write-if 'write_ data-width addr-width)
+
+        (output (5 debug_error_o))
+        (output error_o)
+        )
+
+        ,@(make-axis-main-reg 'read_ data-width)
+
+        (reg= read_req_ack_r 0)
+        (assign read_req_ack read_req_ack_r)
+        (reg= read_finished_r 0)
+        (assign read_finished read_finished_r)
+
+        (reg= write_req_ack_r 0)
+        (assign write_req_ack write_req_ack_r)
+        (reg= write_finished_r 0)
+        (assign write_finished write_finished_r)
+
+        (reg psram_cmd_r)
+        (reg= psram_cmd_en_r 0)
+
+        (reg (,addr-width psram_addr_r))
+        (reg (10 psram_bytes_r))
+        (reg psram_is_first_line)
+
+        (reg= (5 psman_status) 0)
+        (reg (,(max read-latency-bit-width beat-n-bit-width) read_counter))
+
+        (reg (,data-width rd_data_r))
+
+        (reg= (5 debug_error_n) (d 5 0))
+        (reg= rd_error_r 0)
+        (assign debug_error_o debug_error_n)
+        (assign error_o rd_error_r)
+
+        (always ((posedge clk))
+            (case psman_status
+                (#b00000
+                  (cond 
+                    (read_req
+                      (<=# read_req_ack_r 1)
+                      (<=# psram_addr_r read_addr)
+                      (<=# psram_bytes_r read_bytes)
+                      (<=# psram_is_first_line read_is_first_line)
+                      (<=# psram_cmd_r 0)
+                      (<=# psman_status #b00001))
+                    (write_req
+                      (<=# write_req_ack_r 1)
+                      (<=# psram_addr_r write_addr)
+                      (<=# psram_bytes_r write_bytes)
+                      (<=# psram_is_first_line 0)
+                      (<=# psram_cmd_r 1)
+                      (<=# psman_status #b10000))))
+
+                ; Read
+                (#b00001
+                    (if (& (! read_almost_full_i) (== read_req 0))
+                       ((<=# read_req_ack_r 0)
+                        (<=# psram_cmd_en_r 1)
+                        (<=# psman_status #b00011)))
+                    (<=# read_counter 0))
+
+                ; Wait Read Data
+                (#b00011
+                    (<=# psram_cmd_en_r 0)
+                    (if (== read_counter ,(l_- read-latency 1))
+                      ((<=# psman_status #b00010)
+                       (<=# read_counter 0))
+                      (<=# read_counter (+ read_counter 1))))
+
+                ; Read Data as Burst
+                (#b00010
+                    (<=# read_tdata_r rd_data_i)
+                    (<=# read_tvalid_r 1)
+                    (<=# read_tuser_r psram_is_first_line)
+                    (<=# psram_is_first_line #b0)
+
+                    (if (== rd_data_valid_i #b0)
+                        ((<=# rd_error_r 1)
+                         (<=# debug_error_n (+ debug_error_n 1))))
+
+                    (if (== read_counter ,(l_- beat-n 1))
+                        ((<=# psman_status #b00110)
+                         (<=# read_tlast_r (<= psram_bytes_r ,one-read-bytes)))
+                        (<=# read_counter (+ read_counter 1))))
+
+                ; Read Done 
+                (#b00110
+                  (<=# read_tvalid_r 0)
+                  (<=# read_tlast_r 0)
+                  (if (> psram_bytes_r ,one-read-bytes)
+                    ((<=# psram_bytes_r (- psram_bytes_r ,one-read-bytes))
+                     (<=# psram_addr_r (+ psram_addr_r ,one-read-bytes))
+                     (<=# psman_status #b00011))
+                    ((<=# read_finished_r 1)
+                     (<=# psman_status #b00100))))
+
+                ; Wait read finished ACK
+                (#b00100
+                    (if (== read_finished_ack 1)
+                      (<=# read_finished_r 0)
+                      (<=# psman_status #b00000)))
+
+                ; Write
+                (#b10000
+(<=# psman_status psman_status)
+                )
+                (default
+                    ; nothing to do
+                    (<=# psman_status psman_status))))
+
+        )))
+
+(when (eq *__name__* :__main__)
+  (defparameter *clock-period* 10)
+  (setf *transport-delay* 1)
+
+  (make-psdma-module my_mo)
+
+    )
+
+(make-epilogue)

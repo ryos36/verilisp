@@ -8,13 +8,10 @@ rule translate
 rule compile
     command = $iverilog $iverilog_opt -o $out $in
 
-build all: phony timing-generator signal-log.v
+build all: phony timing-generator psdma
 
 build timing-generator.v: translate timing-generator.hvl
 build timing-generator : compile timing-generator.v
-
-build signal-log.v: translate signal-log.hvl
-build signal-log : compile signal-log.v
 
 build psdma.v: translate psdma.hvl
 build psdma : compile psdma.v
