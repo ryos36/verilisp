@@ -4,8 +4,8 @@
 (defmacro inc (sym)
     `(v_<=# ,sym (v_+ ,sym 1)))
 
-(defmacro make-signal-log (name &optional (width 1) file-name)
-    ;(let ((file-name (if (null file-name) (concatenate 'string (symbol-name name) *signal-log-suffix*) file-name)))
+(defmacro make-signal-log (name width &optional file-name)
+    ;(let ((file-name (v_if (null file-name) (concatenate 'string (symbol-name name) *signal-log-suffix*) file-name)))
         `(v_module ,name ((input clk) (input (,width ,name)) (input finished))
 
             (v_initial
@@ -38,53 +38,52 @@
                 ;)
                 )
 
-(when (eq *__name__* :__main__)
-    (make-signal-log data16 16)
+(make-signal-log data16 16)
 
-    (module tb ()
-     (reg clk)
-     (reg rst)
+(v_module tb ()
+ (v_reg clk)
+ (v_reg rst)
 
-     (always ()
-        (nli)
-        (# 5)
-        (= clk (! clk)))
+ (v_always ()
+    (nli)
+    (v_# 5)
+    (v_= clk (v_! clk)))
 
-     (wire hsync vsync)
-     (reg= (16 probe) 0)
-     (reg= finished 0)
+ (v_wire hsync vsync)
+ (v_reg= (16 probe) 0)
+ (v_reg= finished 0)
 
-     (data16 :name data16 clk probe finished)
-     (initial
-        (dumpfile "data16.vcd")
-        (dumpvars 0 data16)
+ (data16 :name data16 clk probe finished)
+ (v_initial
+    (v_dumpfile "data16.vcd")
+    (v_dumpvars 0 data16)
 
-        (= clk 0)
-        (# 200)
-        (= rst 0)
+    (v_= clk 0)
+    (v_# 200)
+    (v_= rst 0)
 
-        (# 200)
-        (= rst 1)
+    (v_# 200)
+    (v_= rst 1)
 
-        (# 200)
-        (= rst 0)
+    (v_# 200)
+    (v_= rst 0)
 
-        (# 200)
-        (= probe 1)
+    (v_# 200)
+    (v_= probe 1)
 
-        (# 4000)
-        (= rst 0)
+    (v_# 4000)
+    (v_= rst 0)
 
-        (# 200)
-        (= probe 0)
+    (v_# 200)
+    (v_= probe 0)
 
-        (# 200)
-        (= finished 1)
+    (v_# 200)
+    (v_= finished 1)
 
-        (# 200)
-        (= probe 1)
+    (v_# 200)
+    (v_= probe 1)
 
-        (# 200)
-        (finish))))
+    (v_# 200)
+    (v_finish)))
 
 (make-epilogue)

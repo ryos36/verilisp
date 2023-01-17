@@ -1,0 +1,15 @@
+verilisp = ../verilisp.py
+iverilog = iverilog
+iverilog_opt = -g2012
+lib_dir=../lib
+
+rule translate
+    command = $verilisp --mangle --dir ../lib $in
+
+rule compile
+    command = $iverilog $iverilog_opt -o $out $in
+
+build all: phony $lib_dir/signal-log.hvlib
+
+build $lib_dir/signal-log.hvlib: translate signal-log.hvl
+

@@ -1580,9 +1580,7 @@
         (progn
             (nli)
             (write-all "reg " name " = ")
-            (if (atom value)
-              (write value)
-              (eval value))
+            (write-or-eval value)
             (write-string ";"))
 
         (let ((bus-width (car name))
@@ -1599,9 +1597,7 @@
 
                 (eval `(v_- ,bus-width 1)))
               (write-all " : 0] " bus-name " = ")
-              (if (atom value)
-                (write value)
-                (eval value))
+              (write-or-eval value)
               (write-string ";"))
 
             (let ((bus-array-n (car bus-name))
@@ -1622,9 +1618,7 @@
               (let ((del " "))
                 (dolist (v value)
                   (write-string del)
-                  (if (atom v)
-                    (write v)
-                    (eval v))
+                  (write-or-eval v)
                   (setf del ", ")))
 
               (write-string "};")))))

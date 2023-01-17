@@ -198,8 +198,11 @@ def main(argv):
     if '-' in argv:
         interactive_interpret()
     elif argv:
-        EXT= '.v'
+        EXT = '.v'
+        DIR = None
+        next_is_dir = False
         for arg in argv:
+
             if arg in ['-h', '--help', '-H']:
                 print(usage)
             elif arg == '--mangle':
@@ -208,8 +211,16 @@ def main(argv):
                 EXT = '.hvlib'
             elif arg == '-t':
                 test()
+            elif arg == '--dir':
+                next_is_dir = True
+            elif next_is_dir:
+                DIR = arg
+                next_is_dir = False
             elif os.path.isfile(arg):
                 filename=os.path.splitext(arg)[0] + EXT
+                if DIR != None:
+                    filename = DIR + '/' + filename
+                print(filename)
                 try:
                     with open(arg, mode='r') as in_f:
                         with open(filename, 'w') as out_f:

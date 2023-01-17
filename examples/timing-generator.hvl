@@ -1,5 +1,4 @@
 (defparameter *clock-period* 10)
-(setf *transport-delay* 1)
 (make-prologue)
 
 (defmacro inc (sym)
@@ -18,12 +17,9 @@
          (input rst)
 
          (output hsync)
-         (output vsync))
-
-      (reg= hsync_r 0)
-      (assign hsync hsync_r)
-      (reg= vsync_r 0)
-      (assign vsync vsync_r)
+         (output vsync)
+         (output henable)
+         (output venable))
 
       (reg= (5 status) 0)
 
@@ -43,6 +39,12 @@
       (wire (12 cur_v_list))
       (assign cur_v_list (ref v_list cur_v_state))
 
+      (assign hsync (== cur_h_state  2))
+      (assign vsync (== cur_v_state  2))
+
+      (assign venable (== cur_v_state 0))
+      (assign henable (& venable (== cur_h_state 0)))
+
       (always ((posedge clk))
         (case status
             (0
@@ -57,16 +59,12 @@
                 (if (== hcount (- cur_h_list 1))
                   ((if (== cur_h_state 1)
                     ((if (== vcount (- cur_v_list 1))
-                      ((if (== cur_v_state 1)
-                        (<=# vsync_r 1)
-                        (<=# vsync_r 0))
-                       (display cur_v_state)
+                      ((display cur_v_state)
                        (inc cur_v_state)
                        (<=# vcount 0))
 
-                      (inc vcount))
-                    (<=# hsync_r 1))
-                    (<=# hsync_r 0))
+                      (inc vcount))))
+
                    (inc cur_h_state)
                    ;(<=# status 3)
                    (<=# hcount 0))
@@ -78,6 +76,7 @@
       ))
 
 (when (eq *__name__* :__main__)
+    (setf *transport-delay* 1)
     (use signal-log)
     (make-timing-generator-module tgen (640 16 96 48) (480 11 2 31))
     (make-signal-log data1)
@@ -90,12 +89,12 @@
         (# 5)
         (= clk (! clk)))
 
-     (wire hsync vsync)
+     (wire hsync vsync he ve)
      (reg= (16 count) 0)
      (reg= finished 0)
 
      (data1 :name data1 clk vsync finished)
-     (tgen :name tgen0 clk rst hsync vsync)
+     (tgen :name tgen0 clk rst hsync vsync he ve)
      (initial
         (= clk 0)
         (dumpfile "tgen.vcd")

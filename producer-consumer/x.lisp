@@ -1,12 +1,15 @@
+
 '(:timing-generator
   :line-n
-  :line-bytes
   :sakiyomi-line-n
+
   :addr
+  :line-bytes
   :stride
   :stream-id)
 
   (
- :addr 
+  :addr 
+  :stride
   :line-bytes
  :stream-id)

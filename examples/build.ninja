@@ -16,4 +16,6 @@ build timing-generator : compile timing-generator.v
 build signal-log.v: translate signal-log.hvl
 build signal-log : compile signal-log.v
 
+build psdma.v: translate psdma.hvl
+build psdma : compile psdma.v
 
