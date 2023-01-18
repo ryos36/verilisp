@@ -1089,6 +1089,7 @@
     )
     (make-module name)
 )
+
 (defmacro v_defmodule (&rest args)
     `(v_module ,@args)
 )
@@ -1161,10 +1162,21 @@
     (eval `(v_comment ,@body))
 )
 
+(defmacro v_wait (condition)
+    (check-in-module)
+    (nli)
+    (write-string "wait")
+    (eval-or-write condition)
+    (write-string ";")
+    (nli)
+    nil)
+    
+;(v_delay num [nil :pass])
 (defmacro v_delay (&rest ticks)
     (check-in-module)
     (let* (
-            (is-statement (not (car (last ticks))))
+            (last-item (car (last ticks)))
+            (is-statement (or (not last-item) (eq :pass last-item)))
             (ticks
                 (if is-statement
                     (slice ticks 0 (- (length ticks) 1))
@@ -1196,6 +1208,7 @@
     )
     nil
 )
+
 (defmacro v_# (&rest ticks)
     `(v_delay ,@ticks)
 )
@@ -1994,13 +2007,27 @@
     )
 )
 
+(defun write-formatted-num (format size v)
+    (assert (<= v (expt 2 size)) nil "~a must be smaller than 2^~a" v size)
+    (ccase format
+        ('d (format t "~d" v))
+        ('b (format t "~v,'0b" size v))
+        ('o (multiple-value-bind (a b) (floor size 3)
+            (if (= b 0) (format t "~v,'0o" a v)
+                         (format t "~o" v))))
+        ('h (multiple-value-bind (a b) (floor size 4)
+            (if (= b 0) (format t "~v,'0x" a v)
+                         (format t "~o" v))))))
+
 (foreach format '(d b h o)
     (eval
         `(defmacro ,(mangle format) (size num)
             (write size)
             (write-string "'")
             (write ',format)
-            (write num)
+            (if (numberp num)
+              (write-formatted-num ',format size num)
+              (format t "~a" num))
             nil
         )
     )

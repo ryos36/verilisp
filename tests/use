@@ -51,7 +51,7 @@ module clock(clk);
     end
     always
     begin
-        #1;
+        #5;
         clk = (!clk);
     end
 endmodule

@@ -4,7 +4,7 @@
 (defparameter *DATA_WIDTH* (l_* 4 *DQ_WIDTH*))
 (defparameter *DATA_MASK_WIDTH* (l_/ *DATA_WIDTH* 8))
 
-(defun make-axis-sub (tdata-width &optional (axi-name ""))
+(defun make-axis-sub-if (axi-name tdata-width)
       (copy-tree
         `((input ,(symcat axi-name 'tvalid))
           (output ,(symcat axi-name 'tready))
@@ -12,7 +12,7 @@
           (input ,(symcat axi-name 'tuser))
           (input ,(symcat axi-name 'tlast)))))
 
-(defun make-axis-main (tdata-width &optional (axi-name ""))
+(defun make-axis-main-if (axi-name tdata-width)
       (copy-tree
         `((output ,(symcat axi-name 'tvalid))
           (input ,(symcat axi-name 'tready))
@@ -20,6 +20,7 @@
           (output ,(symcat axi-name 'tuser))
           (output ,(symcat axi-name 'tlast)))))
 
+;----------------------------------------------------------------
 (defun make-axis-main-reg (axi-name tdata-width)
       (copy-tree
         `((reg= ,(symcat axi-name 'tvalid_r) 0)
@@ -27,10 +28,28 @@
           (reg ,(symcat axi-name 'tuser_r))
           (reg ,(symcat axi-name 'tlast_r))
 
-
           ,@(mapcar #'(lambda (x) 
                   `(assign ,(symcat axi-name x) ,(symcat axi-name x '_r)))
                   '(tvalid tdata tuser tlast)))))
+
+;----------------------------------------------------------------
+(defun make-axis-wire (axi-name tdata-width &optional (postfix '_w))
+  (copy-tree
+   `((wire ,(symcat axi-name 'tvalid postfix ))
+     (wire ,(symcat axi-name 'tready postfix ))
+     (wire (,tdata-width ,(symcat axi-name 'tdata postfix)))
+     (wire ,(symcat axi-name 'tuser postfix))
+     (wire ,(symcat axi-name 'tlast postfix)))))
+
+;----------------------------------------------------------------
+(defun make-axis-name-list (axi-name tdata-width &optional (postfix '_w))
+  `(,(symcat axi-name 'tvalid postfix)
+    ,(symcat axi-name 'tready postfix)
+    ,(symcat axi-name 'tdata postfix)
+    ,(symcat axi-name 'tuser postfix)
+    ,(symcat axi-name 'tlast postfix)))
+
+;----------------------------------------------------------------
 
 (defun make-read-if (name data-width addr-width &optional use-for-video)
     (copy-tree
@@ -45,7 +64,7 @@
 
           ,(l_if use-for-video `(input ,(symcat name 'is_first_line)))
 
-          ,@(make-axis-main data-width name))))
+          ,@(make-axis-main-if name data-width))))
 
 (defun make-write-if (name data-width addr-width)
     (copy-tree
@@ -56,7 +75,7 @@
           (output ,(symcat name 'finished))
           (input ,(symcat name 'finished_ack))
 
-          ,@(make-axis-sub data-width name))))
+          ,@(make-axis-sub-if name data-width))))
 
 (defmacro make-psdma-module (module-name &optional (beat-n 32) (read-latency 16) (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
   (let ((one-read-bytes (l_* (l_/ data-width 8) beat-n))
@@ -75,7 +94,7 @@
          (output wr_data_mask_o)
          (output data_mask_o) ; for write?
 
-         (output (,addr-width) addr_o)
+         (output (,addr-width addr_o))
          (output cmd_o)
          (output cmd_en_o)
 
@@ -83,8 +102,7 @@
         ,@(make-write-if 'write_ data-width addr-width)
 
         (output (5 debug_error_o))
-        (output error_o)
-        )
+        (output error_o))
 
         ,@(make-axis-main-reg 'read_ data-width)
 
@@ -118,21 +136,22 @@
         (always ((posedge clk))
             (case psman_status
                 (#b00000
-                  (cond 
-                    (read_req
-                      (<=# read_req_ack_r 1)
-                      (<=# psram_addr_r read_addr)
-                      (<=# psram_bytes_r read_bytes)
-                      (<=# psram_is_first_line read_is_first_line)
-                      (<=# psram_cmd_r 0)
-                      (<=# psman_status #b00001))
-                    (write_req
-                      (<=# write_req_ack_r 1)
-                      (<=# psram_addr_r write_addr)
-                      (<=# psram_bytes_r write_bytes)
-                      (<=# psram_is_first_line 0)
-                      (<=# psram_cmd_r 1)
-                      (<=# psman_status #b10000))))
+                  (if init_calib_i
+                    (cond
+                      (read_req
+                        (<=# read_req_ack_r 1)
+                        (<=# psram_addr_r read_addr)
+                        (<=# psram_bytes_r read_bytes)
+                        (<=# psram_is_first_line read_is_first_line)
+                        (<=# psram_cmd_r 0)
+                        (<=# psman_status #b00001))
+                      (write_req
+                        (<=# write_req_ack_r 1)
+                        (<=# psram_addr_r write_addr)
+                        (<=# psram_bytes_r write_bytes)
+                        (<=# psram_is_first_line 0)
+                        (<=# psram_cmd_r 1)
+                        (<=# psman_status #b10000)))))
 
                 ; Read
                 (#b00001
@@ -180,8 +199,8 @@
                 ; Wait read finished ACK
                 (#b00100
                     (if (== read_finished_ack 1)
-                      (<=# read_finished_r 0)
-                      (<=# psman_status #b00000)))
+                        ((<=# read_finished_r 0)
+                         (<=# psman_status #b00000))))
 
                 ; Write
                 (#b10000
@@ -193,12 +212,156 @@
 
         )))
 
+(defun without-with-postfix (sym remove-postfix-lst add-postfix)
+  (let* ((name (string-downcase (symbol-name sym)))
+         (name-len (length name))
+         (name-2 (subseq name 0 (l_- name-len 2)))
+         (last2 (subseq name (l_- name-len 2)))
+         (name-postfix (l_if (l_> name-len 2) last2))
+         (hit-postfix (find name-postfix (mapcar #'symbol-name remove-postfix-lst) :test #'string=))
+         (sym (symcat (l_if hit-postfix name-2 name) add-postfix)))
+    sym))
+    
+
+(defun make-wire-list-from-module (module-macro &key (ignore-sym-lst '(rst clk))(filter #'(lambda (x) x)) (remove-postfix-lst '(_i _o)) (add-postfix '_w) (only-name nil))
+    (let ((args (caddr (macroexpand-1 `(,module-macro anon)))))
+      (remove-if #'null
+        (mapcar #'(lambda (x) 
+            (let* ((vname-or-lst (cadr x))
+                   (vname (l_if (atom vname-or-lst) vname-or-lst (cadr vname-or-lst)))
+                   (ignore_flag (l_or (find vname ignore-sym-lst) (l_not (funcall filter x))))
+                   (new-vname (l_if ignore_flag vname (without-with-postfix vname remove-postfix-lst add-postfix)))
+                   (dwidth (l_if (l_not (atom vname-or-lst)) (car vname-or-lst))))
+                (l_if ignore_flag nil
+                      (l_if (l_or only-name (null dwidth)) new-vname `(,dwidth ,new-vname)))
+                ;(print `(:v ,new-vname) *error-output*)
+                )) args))))
+
+(defun make-reg-wire-assign (module-macro &key (ignore-sym-lst '(clk rst)))
+    (let ((my-wires `(wire ,@(make-wire-list-from-module module-macro :filter #'(lambda (x) (eq (car x) 'input)) :ignore-sym-lst ignore-sym-lst)))
+          (my-regs `(reg ,@(make-wire-list-from-module module-macro :filter #'(lambda (x) (eq (car x) 'input)) :add-postfix '_r :ignore-sym-lst ignore-sym-lst))))
+          `(,my-wires ,my-regs 
+              ,@(mapcar #'(lambda (x) `(assign ,(symcat x 'w) ,(symcat x 'r)))
+                  (make-wire-list-from-module module-macro :filter 
+                                          #'(lambda (x) (eq (car x) 'input))
+                                          :only-name t
+                                          :add-postfix '_
+                                          :ignore-sym-lst ignore-sym-lst)))))
+
 (when (eq *__name__* :__main__)
-  (defparameter *clock-period* 10)
+  (use clocks)
   (setf *transport-delay* 1)
 
-  (make-psdma-module my_mo)
+  (make-psdma-module psdma)
+  (make-clock clock)
 
-    )
+  ;(setf mrv (caddr (macroexpand-1 '(make-psdma-module psdma))))
+  ;(setf mm (make-wire-list-from-module 'make-psdma-module))
+  ;(print mm *error-output*)
+  ;(print (without-with-postfix 'abc_i_w '(_i _o) '_w) *error-output*)
+ 
+  (eval
+  `(module tb ()
+    (wire clk)
+    (reg= rst 0)
 
-(make-epilogue)
+    (clock :name clock0 clk)
+    
+    #|
+    ,@(make-axis-wire 'read_ *DATA_WIDTH*)
+    ,@(make-axis-wire 'write_ *DATA_WIDTH*)
+    (wire (5 debug_error_w) error_w)
+    |#
+    (wire ,@(make-wire-list-from-module 'make-psdma-module :filter 
+        #'(lambda (x) (eq (car x) 'output))))
+
+#|
+    (wire ,@(make-wire-list-from-module 'make-psdma-module :filter 
+        #'(lambda (x) (eq (car x) 'input))))
+
+    (reg ,@(make-wire-list-from-module 'make-psdma-module :filter 
+        #'(lambda (x) (eq (car x) 'input))
+        :add-postfix '_r))
+
+    ,@(mapcar #'(lambda (x) `(assign ,(symcat x 'w) ,(symcat x 'r)))
+              (make-wire-list-from-module 'make-psdma-module :filter 
+                                          #'(lambda (x) (eq (car x) 'input))
+                                          :only-name t
+                                          :add-postfix '_))
+|#
+    ,@(make-reg-wire-assign 'make-psdma-module :ignore-sym-lst '(rst clk rd_data_i rd_data_valid_i))
+    
+    (psdma :name psdma0 clk rst
+           ,@(make-wire-list-from-module 'make-psdma-module :only-name t)
+        #|
+        ,@(mapcar #'(lambda(x) (symcat 'anon0_ x)) (range 9))
+
+        ,@(mapcar #'(lambda(x) (symcat 'anon1_ x)) (range 8))
+        ,@(make-axis-name-list 'read_ *DATA_WIDTH*)
+
+        ,@(mapcar #'(lambda(x) (symcat 'anon2_ x)) (range 6))
+        ,@(make-axis-name-list 'write_ *DATA_WIDTH*)
+        debug_error_w error_w
+        |#
+
+        )
+
+    (wire (,*DATA_WIDTH* rd_data_w) rd_data_valid_w)
+    (reg (,*DATA_WIDTH* rd_data_r) rd_data_valid_r)
+    (assign rd_data_w rd_data_r)
+    (assign rd_data_valid_w rd_data_valid_r)
+
+#|
+          (input ,(symcat name 'req))
+          (output ,(symcat name 'req_ack))
+          (output ,(symcat name 'finished))
+          (input ,(symcat name 'finished_ack))
+
+          (input ,(symcat name 'almost_full_i))
+|#
+
+    (initial
+        (dumpfile "psdma.vcd")
+        (dumpvars 0 tb)
+
+        (= init_calib_r 1)
+        (= read_addr_r (h ,*ADDR_WIDTH* 00_0000))
+        (= read_bytes_r ,(l_* 640 4))
+        (= read_req_r 0)
+        (= read_finished_ack_r 0)
+        (= read_almost_full_r 0)
+
+        (# 200 :pass)
+        (= rst 0)
+        (# 200) (= rst 1)
+        (# 200) (= rst 0)
+
+        (# 200)
+        (= read_req_r 1)
+        (wait (== read_req_ack_w 1))
+        (# 10)
+        (= read_req_r 0)
+        (# 10)
+        (display "here")
+        (wait (== read_req_ack_w 0))
+        (display "here2")
+
+        (display "read_finished_ack_r:" read_finished_ack_r)
+
+        (# 10)
+        (wait (== read_finished_w 1))
+        (display "here3")
+
+        (# 100)
+        (= read_finished_ack_r 1)
+        (display "read_finished_ack_r:" read_finished_ack_r)
+
+        (# 10)
+        (wait (== read_finished_w 0))
+        (display "here4")
+
+
+        (# 200)
+        (finish)))))
+
+;(make-epilogue)

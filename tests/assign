@@ -11,7 +11,7 @@
 
   (assign debug_v_d (format t "4'h~a" (tobase 333 16)))
   (always ((posedge clk))
-    (if (<= debug_v (+ 16\'h1234 (h 16 1234)))
+    (if (<= debug_v (+ 16\'h1234 (h 16 #x1234)))
      (progn
       (v_<=# debug_v_d debug_v)
       (n= debug_v_d debug_v) ; original style
