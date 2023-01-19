@@ -77,9 +77,8 @@
 
           ,@(make-axis-sub-if name data-width))))
 
-(defmacro make-psdma-module (module-name &optional (beat-n 32) (read-latency 16) (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
+(defmacro make-psdma-module (module-name &optional (beat-n 32) (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
   (let ((one-read-bytes (l_* (l_/ data-width 8) beat-n))
-        (read-latency-bit-width (floor (l_log read-latency) (l_log 2.0)))
         (beat-n-bit-width (floor (l_log beat-n) (l_log 2.0))))
     `(module ,module-name 
         ((input clk)
@@ -124,7 +123,7 @@
         (reg psram_is_first_line)
 
         (reg= (5 psman_status) 0)
-        (reg (,(max read-latency-bit-width beat-n-bit-width) read_counter))
+        (reg (,beat-n-bit-width read_counter))
 
         (reg (,data-width rd_data_r))
 
@@ -159,31 +158,33 @@
                        ((<=# read_req_ack_r 0)
                         (<=# psram_cmd_en_r 1)
                         (<=# psman_status #b00011)))
-                    (<=# read_counter 0))
+                    (<=# read_counter ,(l_- beat-n 1)))
 
                 ; Wait Read Data
                 (#b00011
                     (<=# psram_cmd_en_r 0)
-                    (if (== read_counter ,(l_- read-latency 1))
-                      ((<=# psman_status #b00010)
-                       (<=# read_counter 0))
-                      (<=# read_counter (+ read_counter 1))))
+                    (if (== rd_data_valid_i #b0)
+                      ((<=# read_tvalid_r 1)
+                       (<=# psram_is_first_line #b0)
+                       (<=# psman_status #b00010)))
+
+                    (<=# read_tdata_r rd_data_i)
+                    (<=# read_tuser_r psram_is_first_line))
 
                 ; Read Data as Burst
                 (#b00010
                     (<=# read_tdata_r rd_data_i)
                     (<=# read_tvalid_r 1)
-                    (<=# read_tuser_r psram_is_first_line)
-                    (<=# psram_is_first_line #b0)
+                    (<=# read_tuser_r 0)
 
                     (if (== rd_data_valid_i #b0)
                         ((<=# rd_error_r 1)
                          (<=# debug_error_n (+ debug_error_n 1))))
 
-                    (if (== read_counter ,(l_- beat-n 1))
+                    (if (== read_counter 0)
                         ((<=# psman_status #b00110)
                          (<=# read_tlast_r (<= psram_bytes_r ,one-read-bytes)))
-                        (<=# read_counter (+ read_counter 1))))
+                        (<=# read_counter (- read_counter 1))))
 
                 ; Read Done 
                 (#b00110
@@ -364,4 +365,4 @@
         (# 200)
         (finish)))))
 
-;(make-epilogue)
+(make-epilogue)

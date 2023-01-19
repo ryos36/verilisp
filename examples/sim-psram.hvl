@@ -17,9 +17,6 @@
           (output cmd_en_o))))
 
 
-
-
-
 ; sym から remove-postfix-lst をとりのぞき add-postfix する or
 ; sym から remove-postfix-lst をとりのぞき 対応する add-postfix をつける
 ; add-postfix が nil のばあい何もつけない
@@ -74,13 +71,15 @@
                     (l_if new-vname
                           (l_if (l_or only-name (null dwidth)) new-vname `(,dwidth ,new-vname)))))) if-list)))
 
-(defun make-assign-list-from-if (if-list &key (filter #'(lambda (x) (eq (car x) 'output))) (remove-postfix-lst '(_o)) (add-postfix '_r))
+(defun make-assign-list-from-if (if-list &key (filter #'(lambda (x) (eq (car x) 'output))) (remove-postfix-lst '(_o)) (add-postfix '_r) add-src-postfix)
   (remove-if #'null
     (mapcar #'(lambda (x) 
                 (multiple-value-bind (vname dwidth) (get-declare-name (cadr x))
-                  (let ((new-vname (l_if (funcall filter x)
+                  (let ((src-vname (l_if add-src-postfix
+                                     (without-with-postfix vname remove-postfix-lst add-src-postfix) vname))
+                        (new-vname (l_if (funcall filter x)
                                          (without-with-postfix vname remove-postfix-lst add-postfix))))
-                    (l_if new-vname `(assign ,vname ,new-vname))))) if-list)))
+                    (l_if new-vname `(assign ,src-vname ,new-vname))))) if-list)))
 
 (defmacro make-sim-psram-module (module-name &key (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*) (read-latency 16) (beat-n 32) (read-post-wait-n 16))
    (let ((psram-if (make-reverse-if (make-psram-access-if data-width addr-width))))
@@ -129,7 +128,8 @@
            ; read wait because of busy
            (2
              (if (== read_counter 0)
-               (<=# read_counter ,(l_- read-latency 3))
+               ((<=# read_counter ,(l_- read-latency 3))
+                (<=# status 3))
                (<=# read_counter (- read_counter 1))))
 
            ; read latency
@@ -138,17 +138,17 @@
                 ((<=# rd_data_valid_r 1)
                  (<=# rd_data_r addr_r)
                  (<=# read_counter ,(l_- beat-n 1))
-                 (<=# status 3))
+                 (<=# status 4))
                 (<=# read_counter (- read_counter 1))))
 
            ; output read data
            (4
              (if (== read_counter 0)
                 ((<=# rd_data_valid_r 0)
-                 (<=# rd_data_r (+ rd_data_r 1))
                  (<=# read_counter ,(l_- read-post-wait-n 1))
                  (<=# status 1))
-                (<=# read_counter (- read_counter 1))))
+                ((<=# read_counter (- read_counter 1))
+                 (<=# rd_data_r (+ rd_data_r 1)))))
 
            ; write
            (#b10000
@@ -164,20 +164,56 @@
   (make-clock clock)
   (make-sim-psram-module ese_psram)
 
-#|
-(print 
-  (make-reverse-if (make-psram-access-if))
-  *error-output*)
-|#
-
+  (let ((psram-if (make-psram-access-if)))
+        ;(print `(:psram-access-input-if ,psram-if) *error-output*)
   (eval
     `(module tb ()
        (wire clk)
        (reg= rst 0)
 
+       (reg ,@(make-wire-list-from-if psram-if
+        :filter #'(lambda (x) (l_and (eq (car x) 'output)))
+        :add-postfix '_r
+       ))
+
        (clock :name clock0 clk)
+
+       (wire ,@(make-wire-list-from-if psram-if))
+       ,@(make-assign-list-from-if psram-if :add-src-postfix '_w)
+
+       (ese_psram :name ese_psram0 clk rst
+          ,@(make-wire-list-from-if psram-if
+              :add-postfix '_w
+              :only-name t))
+
        (initial
-         (# 100 :pass)
-         (finish)))))
+         (dumpfile "sim-psram.vcd")
+         (dumpvars 0 tb)
+
+         (= cmd_en_r 0)
+         (= rst 0)
+         (# 200)
+
+         (= rst 1)
+
+         (# 200)
+         (= rst 0)
+
+         (# 200 :pass)
+
+         (= addr_r #x1234)
+         (= cmd_en_r 1)
+         (= cmd_r 0)
+         (# 10)
+         (= cmd_en_r 0)
+         (wait (== rd_data_valid_w 1))
+         (wait (== rd_data_valid_w 0))
+         (= addr_r #x5678)
+         (= cmd_en_r 1)
+         (# 10)
+         (= cmd_en_r 0)
+         (# 2000)
+
+         (finish))))))
 
 (make-epilogue)
