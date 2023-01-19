@@ -4,7 +4,7 @@ iverilog_opt = -g2012
 lib_dir=../lib
 
 rule translate
-    command = $verilisp --mangle --dir ../lib $in
+    command = $verilisp --mangle --dir $lib_dir $in
 
 rule compile
     command = $iverilog $iverilog_opt -o $out $in

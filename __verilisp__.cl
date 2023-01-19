@@ -20,16 +20,18 @@
 (defun DEBUG (x)       (princ x *error-output*))
 
 (defun make-prologue ()
-  (if *timescale*
-    (format t "`timescale ~ans / ~aps~%" 
-            (/ (car *timescale*) 1000)
-            (cadr *timescale*)))
-  (if *nettype-prologue*
-    (format t "`default_nettype ~a~%" *nettype-prologue*)))
+  (when *__name__*
+      (if *timescale*
+        (format t "`timescale ~ans / ~aps~%" 
+                (/ (car *timescale*) 1000)
+                (cadr *timescale*)))
+      (if *nettype-prologue*
+        (format t "`default_nettype ~a~%" *nettype-prologue*))))
 
 (defun make-epilogue ()
-  (if *nettype-epilogue*
-    (format t "~%`default_nettype ~a~%" *nettype-epilogue*)))
+  (when *__name__* 
+    (if *nettype-epilogue*
+      (format t "~%`default_nettype ~a~%" *nettype-epilogue*))))
 
 ;;; BEGIN HELPER macros, functions, and variables
 
@@ -425,9 +427,11 @@
     (eval
         `(concatenate 'string
             ,@(foreach str strings
-                (if (or (numberp str) (listp str))
+                (if (null str) ""
+                  (if (or (numberp str) (listp str))
                     (write-to-string str)
                     (string str)
+                  )
                 )
             )
         )

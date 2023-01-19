@@ -1,18 +1,25 @@
 verilisp = ../verilisp.py
 iverilog = iverilog
 iverilog_opt = -g2012
+lib_dir=./lib
 
 rule translate
     command = $verilisp $in
 
+rule mangle-translate
+    command = $verilisp --mangle --dir $lib_dir $in
+
 rule compile
     command = $iverilog $iverilog_opt -o $out $in
 
-build all: phony timing-generator psdma
+build all: phony timing-generator psdma 
 
 build timing-generator.v: translate timing-generator.hvl
 build timing-generator : compile timing-generator.v
 
 build psdma.v: translate psdma.hvl
 build psdma : compile psdma.v
+
+build sim-psram.v: translate sim-psram.hvl
+build sim-psram : compile sim-psram.v
 

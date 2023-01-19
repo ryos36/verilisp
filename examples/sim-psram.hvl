@@ -1,0 +1,183 @@
+(make-prologue)
+(defparameter *DATA_WIDTH* 64)
+(defparameter *ADDR_WIDTH* 21)
+
+(defun make-psram-access-if (&optional (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
+    (copy-tree
+        `((input init_calib_i)
+          (input (,data-width rd_data_i))
+          (input rd_data_valid_i)
+
+          (output wr_data_o)
+          (output wr_data_mask_o)
+          (output data_mask_o) ; for write?
+
+          (output (,addr-width addr_o))
+          (output cmd_o)
+          (output cmd_en_o))))
+
+
+
+
+
+; sym から remove-postfix-lst をとりのぞき add-postfix する or
+; sym から remove-postfix-lst をとりのぞき 対応する add-postfix をつける
+; add-postfix が nil のばあい何もつけない
+
+(defun without-with-postfix (sym remove-postfix-lst add-postfix)
+  (let* ((name (string-downcase (symbol-name sym)))
+         (name-len (length name))
+         (name-2 (subseq name 0 (l_- name-len 2)))
+         (last2 (subseq name (l_- name-len 2)))
+         (name-postfix (l_if (l_> name-len 2) last2))
+         (hit-postfix-position (position name-postfix (mapcar #'symbol-name remove-postfix-lst) :test #'string=))
+         (sym (symcat (l_if hit-postfix-position name-2 name) 
+            (l_if (listp add-postfix) (nth hit-postfix-position add-postfix) add-postfix)))) sym))
+
+(defun make-reverse-if (lst &optional rewrite)
+  (mapcar #'(lambda (x) 
+    (let* ((if-name (car x))
+           (vname-or-lst (cadr x))
+           (vname-car-lst (l_if (atom vname-or-lst) (cdr x) (cdadr x)))
+           (vname (car vname-car-lst))
+           (new-vname (without-with-postfix vname '(_i _o) '(_o _i)))
+           (alternative-if-name (cadr (member if-name '(input output input)))))
+      (assert alternative-if-name nil "inteface must be input or output. ~a" x)
+      #|
+      (print `(:ain ,alternative-if-name ,x ,(car x) ,
+        (let ((new-x (copy-tree x)))
+            (setf (car new-x) alternative-if-name)
+            new-x)) *error-output*)
+      |#
+      (setf (car x) alternative-if-name)
+      (setf (car vname-car-lst) new-vname)
+      x))
+      (l_if rewrite (copy-tree lst) lst)))
+
+;(reg a)
+;(reg (8 aa))
+;(reg (8 (4 ax)))
+
+(defun get-declare-name (v-name-lst)
+    (l_if (atom v-name-lst) (values v-name-lst nil nil)
+        (let ((data-width (car v-name-lst))
+              (v-name-lst (cadr v-name-lst)))
+            (l_if (atom v-name-lst) (values v-name-lst data-width nil)
+                (values (cadr v-name-lst) data-width (car v-name-lst))))))
+;
+(defun make-wire-list-from-if (if-list &key (filter #'(lambda (x) x)) (remove-postfix-lst '(_i _o)) (add-postfix '_w) (only-name nil))
+  (remove-if #'null
+    (mapcar #'(lambda (x) 
+                (multiple-value-bind (vname dwidth) (get-declare-name (cadr x))
+                  (let ((new-vname (l_if (funcall filter x)
+                                         (without-with-postfix vname remove-postfix-lst add-postfix))))
+                    (l_if new-vname
+                          (l_if (l_or only-name (null dwidth)) new-vname `(,dwidth ,new-vname)))))) if-list)))
+
+(defun make-assign-list-from-if (if-list &key (filter #'(lambda (x) (eq (car x) 'output))) (remove-postfix-lst '(_o)) (add-postfix '_r))
+  (remove-if #'null
+    (mapcar #'(lambda (x) 
+                (multiple-value-bind (vname dwidth) (get-declare-name (cadr x))
+                  (let ((new-vname (l_if (funcall filter x)
+                                         (without-with-postfix vname remove-postfix-lst add-postfix))))
+                    (l_if new-vname `(assign ,vname ,new-vname))))) if-list)))
+
+(defmacro make-sim-psram-module (module-name &key (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*) (read-latency 16) (beat-n 32) (read-post-wait-n 16))
+   (let ((psram-if (make-reverse-if (make-psram-access-if data-width addr-width))))
+    (assert (l_>= read-latency 3) nil "read-latency must be >= 3, but now '~a'" read-latency)
+    `(module ,module-name 
+       ((input clk)
+        (input rst)
+        ,@psram-if)
+
+       (reg ,@(make-wire-list-from-if psram-if
+        :filter #'(lambda (x) 
+            (l_and (eq (car x) 'output)
+                (let ((vname (get-declare-name (cadr x))))
+                    (l_not (member vname '(init_calib_o rd_data_valid_o))))))
+        :add-postfix '_r
+       ))
+
+       (reg= init_calib_r 0)
+       (reg= rd_data_valid_r 0)
+
+       ,@(make-assign-list-from-if psram-if)
+
+       ;----------------------------------------------------------------
+       (reg (,addr-width addr_r))
+
+       ;----------------------------------------------------------------
+       (reg (5 read_counter))
+
+       (reg= (3 status) 0)
+       (always ((posedge clk))
+         (case status
+           (0
+             (<=# init_calib_r 1)
+             (<=# status 1)
+             (<=# read_counter 0)
+             (<=# rd_data_valid_r 0))
+
+           (1
+             (<=# addr_r addr_i);
+
+             (if cmd_en_i
+                (if (== cmd_i 0)
+                  (<=# status 2)
+                  (<=# status #b10000))))
+
+           ; read wait because of busy
+           (2
+             (if (== read_counter 0)
+               (<=# read_counter ,(l_- read-latency 3))
+               (<=# read_counter (- read_counter 1))))
+
+           ; read latency
+           (3
+             (if (== read_counter 0)
+                ((<=# rd_data_valid_r 1)
+                 (<=# rd_data_r addr_r)
+                 (<=# read_counter ,(l_- beat-n 1))
+                 (<=# status 3))
+                (<=# read_counter (- read_counter 1))))
+
+           ; output read data
+           (4
+             (if (== read_counter 0)
+                ((<=# rd_data_valid_r 0)
+                 (<=# rd_data_r (+ rd_data_r 1))
+                 (<=# read_counter ,(l_- read-post-wait-n 1))
+                 (<=# status 1))
+                (<=# read_counter (- read_counter 1))))
+
+           ; write
+           (#b10000
+            (# 200 :pass)
+           )
+
+           (default
+             (# 200 :pass)))))))
+
+(when (eq *__name__* :__main__)
+  (use clocks)
+  (setf *transport-delay* 1)
+  (make-clock clock)
+  (make-sim-psram-module ese_psram)
+
+#|
+(print 
+  (make-reverse-if (make-psram-access-if))
+  *error-output*)
+|#
+
+  (eval
+    `(module tb ()
+       (wire clk)
+       (reg= rst 0)
+
+       (clock :name clock0 clk)
+       (initial
+         (# 100 :pass)
+         (finish)))))
+
+(make-epilogue)
