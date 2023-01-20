@@ -120,11 +120,17 @@ def backquote_let__main__(s):
     else:
         return s
 
-def translate(vl_code):
+def translate(vl_code, file = None):
     if ONLY_MANGLE_MODE:
-        return mangle(vl_code)
-    p = subprocess.Popen(VERILISP_CMD, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, close_fds=True)
-    i, o = p.stdin, p.stdout
+        mangled_code = mangle(vl_code)
+        if file == None:
+            return mangled_code
+        else:
+            file.write(mangled_code)
+            return None
+            
+    p = subprocess.Popen(VERILISP_CMD, shell=True, stdin=subprocess.PIPE, stdout= subprocess.PIPE if file == None else file, close_fds=True)
+    i = p.stdin
     vl_code = f'(add-verilisp-path "{__dir__}/lib/")' + vl_code
     i.write(
         (
@@ -134,11 +140,15 @@ def translate(vl_code):
         + '\n(__end__)\n'
         ).encode('utf-8')
     )
+    i.flush()
     i.close()
     p.wait()
     if p.returncode != 0:
         raise Exception
-    return o.read().decode('utf-8')
+    if file == None:
+        o = p.stdout
+        return o.read().decode('utf-8')
+    return None
 
 TEST_DIVIDER = '\n%s\n' % ('=' * 80)    # in files in the tests directory, separates the verilisp code from the equivalent verilog code
 
@@ -223,7 +233,7 @@ def main(argv):
                 try:
                     with open(arg, mode='r') as in_f:
                         with open(filename, 'w') as out_f:
-                            out_f.write(translate(in_f.read()))
+                            translate(in_f.read(), out_f)
                 except:
                     os.remove(filename)
                     
@@ -231,8 +241,7 @@ def main(argv):
         test()
     else:
         # for verilisp script "#!" lines
-        sys.stdout.write(translate(sys.stdin.read()))
-
+        translate(sys.stdin.read(), sys.stdout)
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))
