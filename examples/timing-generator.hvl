@@ -57,9 +57,12 @@
 
             (2
                 (if (== hcount (- cur_h_list 1))
-                  ((if (== cur_h_state 1)
-                    ((if (== vcount (- cur_v_list 1))
-                      ((display cur_v_state)
+                  (progn
+                   (if (== cur_h_state 1)
+                    (progn
+                     (if (== vcount (- cur_v_list 1))
+                      (progn
+                       (display cur_v_state)
                        (inc cur_v_state)
                        (<=# vcount 0))
 

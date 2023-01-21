@@ -12,6 +12,8 @@ rule mangle-translate
 rule compile
     command = $iverilog $iverilog_opt -o $out $in
 
+build all: phony timing-generator psdma sim-psram sys-tb
+
 build timing-generator.v: translate timing-generator.hvl
 build timing-generator : compile timing-generator.v
 
@@ -21,4 +23,5 @@ build psdma : compile psdma.v
 build sim-psram.v: translate sim-psram.hvl
 build sim-psram : compile sim-psram.v
 
-build all: phony timing-generator psdma sim-psram
+build sys-tb.v: translate sys-tb.hvl
+build sys-tb : compile sys-tb.v

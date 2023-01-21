@@ -1,0 +1,78 @@
+(make-prologue)
+
+(setf *transport-delay* 1)
+
+(use clocks)
+(use psdma)
+(use sim-psram)
+
+(make-psdma-module psdma)
+(make-clock clock)
+(make-sim-psram-module ese_psram)
+
+(defvar psram-if (make-psram-access-if))
+
+(eval
+  `(module tb ()
+     (wire clk)
+     (reg= rst 0)
+     
+     (clock :name clock0 clk)
+
+     ,@(make-reg-wire-assign 'make-psdma-module :ignore-sym-lst '(rst clk init_calib_i rd_data_i rd_data_valid_i wr_data_o wr_data_mask_o data_mask_o addr_o cmd_o cmd_en_o))
+     
+     (wire ,@(make-wire-list-from-module 'make-psdma-module :ignore-sym-lst '(rst clk init_calib_i rd_data_i rd_data_valid_i wr_data_o wr_data_mask_o data_mask_o addr_o cmd_o cmd_en_o) :filter #'(lambda (x) (eq (car x) 'output))))
+     
+     (wire init_calib_w (,*DATA_WIDTH* rd_data_w) rd_data_valid_w (,*DATA_WIDTH* wr_data_w) wr_data_mask_w data_mask_w (,*ADDR_WIDTH* addr_w) cmd_w cmd_en_w)
+     
+     (psdma :name psdma0 clk rst ,@(make-wire-list-from-module 'make-psdma-module :only-name t))
+
+     ;----------------------------------------------------------------
+     (ese_psram :name ese_psram0 clk rst
+          ,@(make-wire-list-from-if psram-if
+              :add-postfix '_w
+              :only-name t))
+     
+     (initial
+         (dumpfile "sys-tb.vcd")
+         (dumpvars 0 tb)
+     
+         (= read_addr_r (h ,*ADDR_WIDTH* 00_0000))
+         (= read_bytes_r ,(l_* 640 4))
+         (= read_req_r 0)
+         (= read_finished_ack_r 0)
+         (= read_almost_full_r 0)
+         (= read_is_first_line_r 1)
+         (= read_tready_r 1)
+     
+         (# 200 :pass)
+         (= rst 0)
+         (# 200) (= rst 1)
+         (# 200) (= rst 0)
+     
+         (# 200)
+         (= read_req_r 1)
+         (wait (== read_req_ack_w 1))
+         (# 10)
+         (= read_req_r 0)
+         (# 10)
+         (wait (== read_req_ack_w 0))
+         (= read_is_first_line_r 0)
+     
+         (display "read_finished_ack_r:" read_finished_ack_r)
+     
+         (# 10)
+         (wait (== read_finished_w 1))
+     
+         (# 100)
+         (= read_finished_ack_r 1)
+     
+         (# 10)
+         (wait (== read_finished_w 0))
+     
+         (# 200)
+         (finish)
+         )
+         ))
+
+(make-epilogue)

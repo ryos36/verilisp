@@ -20,7 +20,8 @@
                 (v_if (v_== probe_signal_r probe_signal_rr)
                     (my-my-inc count)
                     (v_if (v_== finished_r 0)
-                      ((v_display "(%d . #x%x)" count probe_signal_rr)
+                      (progn
+                       (v_display "(%d . #x%x)" count probe_signal_rr)
                        (v_<=# count 0)))))
             (v_always ((posedge clk))
                 (v_case finished_r

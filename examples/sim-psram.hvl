@@ -8,9 +8,9 @@
           (input (,data-width rd_data_i))
           (input rd_data_valid_i)
 
-          (output wr_data_o)
+          (output (,data-width wr_data_o))
           (output wr_data_mask_o)
-          (output data_mask_o) ; for write?
+          (output data_mask_o)
 
           (output (,addr-width addr_o))
           (output cmd_o)
@@ -128,14 +128,16 @@
            ; read wait because of busy
            (2
              (if (== read_counter 0)
-               ((<=# read_counter ,(l_- read-latency 3))
+               (progn
+                (<=# read_counter ,(l_- read-latency 3))
                 (<=# status 3))
                (<=# read_counter (- read_counter 1))))
 
            ; read latency
            (3
              (if (== read_counter 0)
-                ((<=# rd_data_valid_r 1)
+                (progn
+                 (<=# rd_data_valid_r 1)
                  (<=# rd_data_r addr_r)
                  (<=# read_counter ,(l_- beat-n 1))
                  (<=# status 4))
@@ -144,10 +146,12 @@
            ; output read data
            (4
              (if (== read_counter 0)
-                ((<=# rd_data_valid_r 0)
+                (progn
+                 (<=# rd_data_valid_r 0)
                  (<=# read_counter ,(l_- read-post-wait-n 1))
                  (<=# status 1))
-                ((<=# read_counter (- read_counter 1))
+                (progn
+                 (<=# read_counter (- read_counter 1))
                  (<=# rd_data_r (+ rd_data_r 1)))))
 
            ; write
