@@ -4,7 +4,9 @@ iverilog_opt = -g2012
 lib_dir=./lib
 
 rule translate
-    command = $verilisp $in
+    depfile = $out.d
+    deps = gcc
+    command = $verilisp --depfile $depfile $in
 
 rule mangle-translate
     command = $verilisp --mangle --dir $lib_dir $in
@@ -12,6 +14,10 @@ rule mangle-translate
 rule compile
     command = $iverilog $iverilog_opt -o $out $in
 
+rule echo
+    command = echo $in > $out
+
+build allx: phony gege
 build all: phony timing-generator psdma sim-psram sys-tb
 
 build timing-generator.v: translate timing-generator.hvl
@@ -25,3 +31,9 @@ build sim-psram : compile sim-psram.v
 
 build sys-tb.v: translate sys-tb.hvl
 build sys-tb : compile sys-tb.v
+
+build lib/psdma.hvlib: mangle-translate psdma.hvl
+
+build gege: echo psdma.hvl
+default all
+

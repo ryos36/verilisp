@@ -1,0 +1,162 @@
+#!/bin/sh
+#|-*- mode:lisp -*-|#
+#|
+exec ros -Q -- $0 "$@"
+|#
+
+(declaim #+sbcl(sb-ext:muffle-conditions style-warning))
+(declaim #+sbcl(sb-ext:muffle-conditions warning))
+
+(progn ;;init forms
+  (ros:ensure-asdf)
+  #+quicklisp(ql:quickload '() :silent t)
+
+  (ql:quickload "cl-fad" :silent t)
+  (ql:quickload "uiop" :silent t)
+  )
+
+(defpackage :ros.script.kage.3883271258
+  (:use :cl :cl-fad))
+(in-package :ros.script.kage.3883271258)
+
+(defparameter *HVALA-EXT* ".hvl")
+(defparameter *HVALA-USE* "(use ")
+(defparameter *HVALA-MODULE* "module tb ()")
+(defparameter *HVALA-NAME* " *__name__* ")
+(defparameter *__name__* nil)
+
+(defparameter *lib-dir* "lib")
+(defparameter *tb-dir* "tb")
+(defparameter *v-dir* "v")
+(defparameter *out-file* "build.kage")
+
+(defmacro while (test &body body)
+  `(do ()
+     ((not ,test))
+     ,@body))
+
+(defun check-use-and-test-bench (hvl-files)
+  (mapcar #'(lambda (file)
+    (with-open-file (in file :direction :input)
+      (let (use-lst)
+          (do ((line (read-line in nil) (read-line in nil))) ((not line))
+            ;(print `(:line ,line))
+              (let* ((use-pos (search *HVALA-USE* line))
+                     (use-stmt (and use-pos (read-from-string (subseq line use-pos) nil))))
+                ;(print `(:use-stmt ,use-stmt))
+                (if use-stmt (push (cadr use-stmt) use-lst)
+                  (if (or (search *HVALA-NAME* line) (search *HVALA-MODULE* line))
+                    (push :tb use-lst)))))
+          #+:debug (print `(:ge ,file ,use-lst))
+          (cons file use-lst)))) hvl-files))
+
+(defun make-lib-tb-v-values (hvl-list)
+  (let (hvl-sym-list all-use-list hvl-name-list tb-list v-file-list)
+    (dolist (one hvl-list)
+      (let* ((hvl-file (car one))
+             (bare-file (pathname-name hvl-file))
+             (v-file (concatenate 'string bare-file ".v"))
+             (hvl-sym (intern (string-upcase bare-file)))
+             (use-list (remove :tb (cdr one)))
+             (use-as-lib (find hvl-sym use-list)))
+        (push (cons hvl-sym hvl-file) hvl-name-list)
+        (push hvl-sym hvl-sym-list)
+        (push (cons hvl-file v-file) v-file-list)
+        (if (not (= (length use-list) (length (cdr one))))
+            (push hvl-file tb-list))
+        (if use-list (setf all-use-list (nconc use-list all-use-list)))))
+
+    (values 
+      (remove-if #'null (mapcar #'(lambda (x) (cdr (assoc (find x hvl-sym-list) hvl-name-list))) all-use-list))
+      tb-list
+      v-file-list
+      )))
+
+(defun usage (msg)
+    (format t "Usage: --out build.kage --lib lib_dir --tb tb_dir --v v_dir~%")
+    msg)
+
+(defun analyze-arg (argv)
+  (if (null argv) argv
+    (let* ((a-opt (car argv))
+           (opt-arg (cadr argv))
+           (opt (cdr (assoc a-opt
+                      '(("--out" . :out)
+                        ("--lib" . :lib)
+                        ("--tb"  . :tb)
+                        ("--v"   . :v) 
+                        ("-v"    . :v))
+                      :test #'string=)))
+          (skip nil))
+      (if opt 
+        (progn
+          (case opt
+            (:v (progn
+                  (assert (and opt-arg (not (char= (char opt-arg 0) #\-))) nil (usage "~a requires an argument.") a-opt)
+                  (setf skip t)
+                  (setf *v-dir* opt-arg)))
+            (:tb (progn
+                   (assert (and opt-arg (not (char= (char opt-arg 0) #\-))) nil (usage "~a requires an argument.") a-opt)
+                   (setf skip t)
+                   (setf *tb-dir* opt-arg)))
+            (:lib (progn
+                    (assert (and opt-arg (not (char= (char opt-arg 0) #\-))) nil (usage "~a requires an argument.") a-opt)
+                    (setf skip t)
+                    (setf *lib-dir* opt-arg)))
+            (:out (progn
+                    (assert (and opt-arg (or (not (char= (char opt-arg 0) #\-)) (= (length opt-arg) 1))) nil (usage "~a requires an argument.") a-opt)
+                    (assert (not (cl-fad:file-exists-p opt-arg)) nil "~a is exists." opt-arg)
+                    (setf skip t)
+                    (setf *out-file* (if (not (string= "-" opt-arg)) opt-arg)))))
+
+          (analyze-arg (if skip (cddr argv) (cdr argv))))
+        argv))))
+
+(defparameter *TEXT*
+    '(("verilisp = ../verilisp.py")
+      ("iverilog = iverilog")
+      ("iverilog_opt = -g2012")
+      ("lib_dir=~a" *lib-dir*)
+      ("tb_dir=~a" *tb-dir*)
+      ("v_dir=~a" *v-dir*)
+      ("rule translate")
+      ("    command = $verilisp --dir $v_dir $in")
+      ("rule mangle-translate")
+      ("    command = $verilisp --mangle --dir $lib_dir $in")
+      ("rule compile")
+      ("    command = $iverilog $iverilog_opt -o $tb_dir/$out $v_dir/$in")))
+
+(defun main (&rest argv)
+  (declare (ignorable argv))
+  (setf argv (analyze-arg argv))
+  #+:debug (print `(:argv ,argv ,*tb-dir* ,*lib-dir* ,*v-dir* ,*out-file*))
+
+  (let ((hvl-files (or argv 
+                       (let ((rv)
+                             (cwd-pos (length (namestring (uiop/os:getcwd)))))
+                         (cl-fad:walk-directory "." 
+                            #'(lambda(f) (push 
+                                (subseq (namestring f) cwd-pos)
+                            rv))
+                            :test #'(lambda (file) 
+                                (let* ((file-str (file-namestring file))
+                                       (pos (search *HVALA-EXT* file-str :from-end t)))
+                                    (and pos (string= (subseq file-str pos) *HVALA-EXT*)))))
+                                    rv
+                                    ))))
+
+    #+:debug (print `(:HVL ,hvl-files))
+    #+:debug-test (setf hvl-files '("test.hvl"))
+    (let ((hvl-list (check-use-and-test-bench hvl-files)))
+      (multiple-value-bind (lib-list tb-list v-list) (make-lib-tb-v-values hvl-list) 
+        #+:debug (print `(:list ,hvl-list ,lib-list ,tb-list ,v-list))
+
+        (flet ((write-all (out)
+                          (dolist (line *TEXT*)
+                            (eval `(format ,out ,(concatenate 'string (car line) "~%") ,@(cdr line))))))
+          (if *out-file*
+            (with-open-file (out *out-file* :direction :output)
+                (write-all out))
+            (write-all *standard-output*)))))))
+
+;;; vim: set ft=lisp lisp:

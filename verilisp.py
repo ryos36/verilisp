@@ -15,6 +15,8 @@ __dir__ = os.path.dirname(os.path.abspath(__file__))
 
 VERILISP_CMD = 'clisp -modern ' + os.path.join(__dir__, '__verilisp__.cl')
 ONLY_MANGLE_MODE = False
+DEP_FILE = None
+TARGET_FILE = None
 DIFFER = difflib.unified_diff
 MANGLER = 'v_'    # must match 'verilog-name-mangle' in verilisp.cl
 ANTIMANGLER = 'l_'    # let you use lisp's 'and', etc. as 'l_and'
@@ -132,6 +134,8 @@ def translate(vl_code, file = None):
     p = subprocess.Popen(VERILISP_CMD, shell=True, stdin=subprocess.PIPE, stdout= subprocess.PIPE if file == None else file, close_fds=True)
     i = p.stdin
     vl_code = f'(add-verilisp-path "{__dir__}/lib/")' + vl_code
+    if DEP_FILE != None:
+        vl_code = f'(setf *DEP-FILE* "{DEP_FILE}")(setf *TARGET-FILE* "{TARGET_FILE}")' + vl_code
     i.write(
         (
         backquote_let__main__(
@@ -211,6 +215,7 @@ def main(argv):
         EXT = '.v'
         DIR = None
         next_is_dir = False
+        next_is_dep = False
         for arg in argv:
 
             if arg in ['-h', '--help', '-H']:
@@ -226,11 +231,21 @@ def main(argv):
             elif next_is_dir:
                 DIR = arg
                 next_is_dir = False
+            elif arg == '--depfile':
+                next_is_dep = True
+            elif next_is_dep:
+                global DEP_FILE
+                DEP_FILE = arg
+                next_is_dep = False
+                with open(DEP_FILE, 'w'):
+                    pass
             elif os.path.isfile(arg):
                 filename=os.path.splitext(arg)[0] + EXT
                 if DIR != None:
                     filename = DIR + '/' + filename
                 try:
+                    global TARGET_FILE
+                    TARGET_FILE = filename
                     with open(arg, mode='r') as in_f:
                         with open(filename, 'w') as out_f:
                             translate(in_f.read(), out_f)

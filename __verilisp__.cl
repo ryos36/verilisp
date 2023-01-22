@@ -16,6 +16,9 @@
 (defparameter *transport-delay* nil)
 (defparameter *inertial-delay* nil)
 
+(defparameter *DEP-FILE* nil)
+(defparameter *TARGET-FILE* nil)
+
 (defun debug-write (x) (princ x *error-output*))
 (defun DEBUG (x)       (princ x *error-output*))
 
@@ -835,8 +838,12 @@
         )
         (foreach path-dir *verilisp-path*
             (foreach path (directory (make-pathname :name :wild :defaults path-dir))
-                ; (write (pathname-name path)
-                (if (string= (pathname-name path) package-name)
+                (when (string= (pathname-name path) package-name)
+
+                    (if (and *DEP-FILE* *TARGET-FILE*)
+                      (with-open-file
+                        (out *DEP-FILE* :direction :output :if-exists :append)
+                        (format out "~a : ~a~%" *TARGET-FILE* path)))
                     (setq result path)
                 )
             )
