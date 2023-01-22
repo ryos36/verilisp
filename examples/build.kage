@@ -1,0 +1,4 @@
+((:build . ".*\.hvl$")
+ (:module . ".*mod\.hvl$")
+ (:install-dir . "/tmp/install")
+ (:lib . :auto))

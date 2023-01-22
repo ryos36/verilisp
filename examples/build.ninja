@@ -1,39 +1,35 @@
-verilisp = ../verilisp.py
-iverilog = iverilog
-iverilog_opt = -g2012
-lib_dir=./lib
-
-rule translate
-    depfile = $out.d
-    deps = gcc
-    command = $verilisp --depfile $depfile $in
-
-rule mangle-translate
-    command = $verilisp --mangle --dir $lib_dir $in
-
-rule compile
-    command = $iverilog $iverilog_opt -o $out $in
-
-rule echo
-    command = echo $in > $out
-
-build allx: phony gege
-build all: phony timing-generator psdma sim-psram sys-tb
-
-build timing-generator.v: translate timing-generator.hvl
-build timing-generator : compile timing-generator.v
-
-build psdma.v: translate psdma.hvl
-build psdma : compile psdma.v
-
-build sim-psram.v: translate sim-psram.hvl
-build sim-psram : compile sim-psram.v
-
-build sys-tb.v: translate sys-tb.hvl
-build sys-tb : compile sys-tb.v
-
-build lib/psdma.hvlib: mangle-translate psdma.hvl
-
-build gege: echo psdma.hvl
+include ../scripts/rule.ninja
+install_dir = /tmp/install
+build all: phony lib v exe
 default all
-
+build lib: phony lib/gege.hvlib lib/sim-psram.hvlib lib/psdma.hvlib
+build v: phony build/timing-generator.v build/test.v build/sys-tb.v build/ryos-mod.v build/gege.v build/sim_count.v build/sim-psram.v build/ren.v build/psdma.v build/macro_sim_count.v build/image_to_axis.v build/axis-test.v
+build exe: phony build/timing-generator build/test build/sys-tb build/ryos-mod build/gege build/sim_count build/sim-psram build/ren build/psdma build/macro_sim_count build/image_to_axis build/axis-test
+build build/timing-generator.v: translate timing-generator.hvl
+build build/test.v: translate test.hvl
+build build/sys-tb.v: translate sys-tb.hvl
+build build/ryos-mod.v: translate src/ryos-mod.hvl
+build build/gege.v: translate src/gege.hvl
+build build/sim_count.v: translate sim_count.hvl
+build build/sim-psram.v: translate sim-psram.hvl
+build build/ren.v: translate ren.hvl
+build build/psdma.v: translate psdma.hvl
+build build/macro_sim_count.v: translate macro_sim_count.hvl
+build build/image_to_axis.v: translate image_to_axis.hvl
+build build/axis-test.v: translate axis-test.hvl
+build build/timing-generator: compile build/timing-generator.v
+build build/test: compile build/test.v
+build build/sys-tb: compile build/sys-tb.v
+build build/ryos-mod: compile build/ryos-mod.v
+build build/gege: compile build/gege.v
+build build/sim_count: compile build/sim_count.v
+build build/sim-psram: compile build/sim-psram.v
+build build/ren: compile build/ren.v
+build build/psdma: compile build/psdma.v
+build build/macro_sim_count: compile build/macro_sim_count.v
+build build/image_to_axis: compile build/image_to_axis.v
+build build/axis-test: compile build/axis-test.v
+build lib/gege.hvlib: mangle-translate src/gege.hvl
+build lib/sim-psram.hvlib: mangle-translate sim-psram.hvl
+build lib/psdma.hvlib: mangle-translate psdma.hvl
+build install: do-install build/ryos-mod.v

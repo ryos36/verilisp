@@ -132,5 +132,4 @@
     (finish))
 )
 
-(v_reg (8 (8 data)))
 (make-epilogue)

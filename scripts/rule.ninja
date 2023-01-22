@@ -1,0 +1,20 @@
+verilisp = ../verilisp.py
+iverilog = iverilog
+iverilog_opt = -g2012
+lib_dir=./lib
+build_dir=./build
+
+rule translate
+    depfile = $out.d
+    deps = gcc
+    command = $verilisp --dir $build_dir --depfile $depfile $in
+
+rule mangle-translate
+    command = $verilisp --mangle --dir $lib_dir $in
+
+rule compile
+    command = $iverilog $iverilog_opt -o $out $in
+
+rule do-install
+    command = echo copy $in into $install_dir
+

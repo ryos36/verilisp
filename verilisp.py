@@ -242,7 +242,7 @@ def main(argv):
             elif os.path.isfile(arg):
                 filename=os.path.splitext(arg)[0] + EXT
                 if DIR != None:
-                    filename = DIR + '/' + filename
+                    filename = DIR + '/' + filename.split("/")[-1]
                 try:
                     global TARGET_FILE
                     TARGET_FILE = filename

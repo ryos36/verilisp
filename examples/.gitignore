@@ -1,7 +1,8 @@
 a.out
-psdma
-sim-psram
-timing-generator
+build
+lib
+vcd
+.ninja_deps
 
 jennings.pdf
 jennings.ps

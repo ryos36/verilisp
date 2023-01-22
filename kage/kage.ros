@@ -4,6 +4,8 @@
 exec ros -Q -- $0 "$@"
 |#
 
+;(push :debug *features*)
+
 (declaim #+sbcl(sb-ext:muffle-conditions style-warning))
 (declaim #+sbcl(sb-ext:muffle-conditions warning))
 
@@ -12,6 +14,7 @@ exec ros -Q -- $0 "$@"
   #+quicklisp(ql:quickload '() :silent t)
 
   (ql:quickload "cl-fad" :silent t)
+  (ql:quickload "cl-ppcre" :silent t)
   (ql:quickload "uiop" :silent t)
   )
 
@@ -20,20 +23,59 @@ exec ros -Q -- $0 "$@"
 (in-package :ros.script.kage.3883271258)
 
 (defparameter *HVALA-EXT* ".hvl")
+(defparameter *HVLIB-EXT* ".hvlib")
+(defparameter *VERILOG-EXT* ".v")
+(defparameter *TRANSLATE-RULE* "translate")
+(defparameter *MANGLE-RULE* "mangle-translate")
+(defparameter *COMPILE-RULE* "compile")
+(defparameter *DO-INSTALL-RULE* "do-install")
 (defparameter *HVALA-USE* "(use ")
 (defparameter *HVALA-MODULE* "module tb ()")
 (defparameter *HVALA-NAME* " *__name__* ")
 (defparameter *__name__* nil)
 
+(defparameter *rule-file* "../scripts/rule.ninja")
 (defparameter *lib-dir* "lib")
-(defparameter *tb-dir* "tb")
+(defparameter *build-dir* "build")
 (defparameter *v-dir* "v")
-(defparameter *out-file* "build.kage")
+(defparameter *out-file* "build.ninja")
+(defparameter *in-file* "build.kage")
 
-(defmacro while (test &body body)
-  `(do ()
-     ((not ,test))
-     ,@body))
+
+(defun make-use-sym-list (hvl-files)
+  (let (use-lst)
+    (mapcar #'(lambda (file)
+                (with-open-file (in file :direction :input)
+                  (do ((line (read-line in nil) (read-line in nil))) ((not line))
+                    (let* ((use-pos (search *HVALA-USE* line))
+                           (use-stmt (and use-pos (read-from-string (subseq line use-pos) nil)))
+                           (use-sym (cadr use-stmt)))
+                      (if (and use-stmt (not (member use-sym use-lst))) (push use-sym use-lst))))))
+                        hvl-files)
+    use-lst))
+
+(defun pickup-lib (hvl-files)
+  (let ((use-sym-list (make-use-sym-list hvl-files)))
+    #+:debug (print `(:use-sym-list ,use-sym-list))
+    (remove-if #'null
+      (mapcar #'(lambda (hvl-file)
+                  (let* ((bare-file (pathname-name hvl-file))
+                         (bare-sym (intern (string-upcase bare-file))))
+                     (if (find bare-sym use-sym-list) (cons hvl-file 
+                         (concatenate 'string bare-file *HVLIB-EXT*)))))
+                         hvl-files ))))
+
+;----------------------------------------------------------------
+(defun expand-files (file-ppcre-str)
+  (let ((rv)
+        (cwd-pos (length (namestring (uiop/os:getcwd)))))
+    (cl-fad:walk-directory "." 
+      #'(lambda(f) (push (subseq (namestring f) cwd-pos) rv))
+      :test #'(lambda (file) 
+                ;(print `(:file-pp ,file-ppcre-str ,(namestring file) ,(cl-ppcre:scan ".*\.hvl$" (namestring file))))
+                (cl-ppcre:scan file-ppcre-str (file-namestring file))))
+    rv ))
+;----------------------------------------------------------------
 
 (defun check-use-and-test-bench (hvl-files)
   (mapcar #'(lambda (file)
@@ -46,34 +88,35 @@ exec ros -Q -- $0 "$@"
                 ;(print `(:use-stmt ,use-stmt))
                 (if use-stmt (push (cadr use-stmt) use-lst)
                   (if (or (search *HVALA-NAME* line) (search *HVALA-MODULE* line))
-                    (push :tb use-lst)))))
+                    (push :main use-lst)))))
           #+:debug (print `(:ge ,file ,use-lst))
           (cons file use-lst)))) hvl-files))
 
-(defun make-lib-tb-v-values (hvl-list)
-  (let (hvl-sym-list all-use-list hvl-name-list tb-list v-file-list)
+(defun make-lib-main-v-values (hvl-list)
+  (let (hvl-sym-list all-use-list hvl-name-list main-list v-file-list)
     (dolist (one hvl-list)
       (let* ((hvl-file (car one))
              (bare-file (pathname-name hvl-file))
              (v-file (concatenate 'string bare-file ".v"))
              (hvl-sym (intern (string-upcase bare-file)))
-             (use-list (remove :tb (cdr one)))
+             (use-list (remove :main (cdr one)))
              (use-as-lib (find hvl-sym use-list)))
         (push (cons hvl-sym hvl-file) hvl-name-list)
         (push hvl-sym hvl-sym-list)
         (push (cons hvl-file v-file) v-file-list)
         (if (not (= (length use-list) (length (cdr one))))
-            (push hvl-file tb-list))
+            (push hvl-file main-list))
         (if use-list (setf all-use-list (nconc use-list all-use-list)))))
 
     (values 
       (remove-if #'null (mapcar #'(lambda (x) (cdr (assoc (find x hvl-sym-list) hvl-name-list))) all-use-list))
-      tb-list
+      main-list
       v-file-list
       )))
 
+;----------------------------------------------------------------
 (defun usage (msg)
-    (format t "Usage: --out build.kage --lib lib_dir --tb tb_dir --v v_dir~%")
+    (format t "Usage: --out build.kage --lib lib_dir --build build_dir --v v_dir~%")
     msg)
 
 (defun analyze-arg (argv)
@@ -81,11 +124,12 @@ exec ros -Q -- $0 "$@"
     (let* ((a-opt (car argv))
            (opt-arg (cadr argv))
            (opt (cdr (assoc a-opt
-                      '(("--out" . :out)
-                        ("--lib" . :lib)
-                        ("--tb"  . :tb)
-                        ("--v"   . :v) 
-                        ("-v"    . :v))
+                      '(("--out"    . :out)
+                        ("--lib"    . :lib)
+                        ("--build"  . :build)
+                        ("--v"      . :v) 
+                        ("--features" . :features) 
+                        ("-v"       . :v))
                       :test #'string=)))
           (skip nil))
       (if opt 
@@ -95,10 +139,10 @@ exec ros -Q -- $0 "$@"
                   (assert (and opt-arg (not (char= (char opt-arg 0) #\-))) nil (usage "~a requires an argument.") a-opt)
                   (setf skip t)
                   (setf *v-dir* opt-arg)))
-            (:tb (progn
+            (:build (progn
                    (assert (and opt-arg (not (char= (char opt-arg 0) #\-))) nil (usage "~a requires an argument.") a-opt)
                    (setf skip t)
-                   (setf *tb-dir* opt-arg)))
+                   (setf *build-dir* opt-arg)))
             (:lib (progn
                     (assert (and opt-arg (not (char= (char opt-arg 0) #\-))) nil (usage "~a requires an argument.") a-opt)
                     (setf skip t)
@@ -112,51 +156,93 @@ exec ros -Q -- $0 "$@"
           (analyze-arg (if skip (cddr argv) (cdr argv))))
         argv))))
 
-(defparameter *TEXT*
-    '(("verilisp = ../verilisp.py")
-      ("iverilog = iverilog")
-      ("iverilog_opt = -g2012")
-      ("lib_dir=~a" *lib-dir*)
-      ("tb_dir=~a" *tb-dir*)
-      ("v_dir=~a" *v-dir*)
-      ("rule translate")
-      ("    command = $verilisp --dir $v_dir $in")
-      ("rule mangle-translate")
-      ("    command = $verilisp --mangle --dir $lib_dir $in")
-      ("rule compile")
-      ("    command = $iverilog $iverilog_opt -o $tb_dir/$out $v_dir/$in")))
+;----------------------------------------------------------------
+(defun nexpand-wild-card (props)
+    (let* ((build-cons (assoc :build props))
+           (build-file (cdr build-cons)))
+      (if (and build-file (atom build-file))
+        (setf (cdr build-cons) (expand-files build-file))))
+
+    (let* ((module-cons (assoc :module props))
+           (module-file (cdr module-cons)))
+      (if (and module-file (atom module-file))
+        (setf (cdr module-cons) (expand-files module-file))))
+
+    (let* ((lib-cons (assoc :lib props))
+           (lib-file (cdr lib-cons)))
+      (if (and lib-file (atom lib-file))
+        (setf (cdr lib-cons) 
+              (pickup-lib (cdr (assoc :build props))))))
+
+    props)
+
+;----------------------------------------------------------------
 
 (defun main (&rest argv)
   (declare (ignorable argv))
   (setf argv (analyze-arg argv))
-  #+:debug (print `(:argv ,argv ,*tb-dir* ,*lib-dir* ,*v-dir* ,*out-file*))
+  #+:debug (print `(:argv ,argv ,*build-dir* ,*lib-dir* ,*v-dir* ,*out-file*))
 
-  (let ((hvl-files (or argv 
-                       (let ((rv)
-                             (cwd-pos (length (namestring (uiop/os:getcwd)))))
-                         (cl-fad:walk-directory "." 
-                            #'(lambda(f) (push 
-                                (subseq (namestring f) cwd-pos)
-                            rv))
-                            :test #'(lambda (file) 
-                                (let* ((file-str (file-namestring file))
-                                       (pos (search *HVALA-EXT* file-str :from-end t)))
-                                    (and pos (string= (subseq file-str pos) *HVALA-EXT*)))))
-                                    rv
-                                    ))))
+  (let* ((props-file (if (null argv) *in-file* (car (last argv))))
+         (props (nexpand-wild-card (with-open-file (in props-file :direction :input) (read in)))))
 
-    #+:debug (print `(:HVL ,hvl-files))
-    #+:debug-test (setf hvl-files '("test.hvl"))
-    (let ((hvl-list (check-use-and-test-bench hvl-files)))
-      (multiple-value-bind (lib-list tb-list v-list) (make-lib-tb-v-values hvl-list) 
-        #+:debug (print `(:list ,hvl-list ,lib-list ,tb-list ,v-list))
+    (with-open-file (out *out-file* :direction :output :if-exists :overwrite)
+      (let ((rule-file (assoc :rule-file props))
+            (install-dir (assoc :install-dir props))
+            (build (assoc :build props))
+            (module (assoc :module props))
+            (lib (assoc :lib props)))
+        (format out "include ~a~%" 
+                (if rule-file (cdr rule-file) *rule-file*))
+        (if install-dir
+            (format out "install_dir = ~a~%" (cdr install-dir)))
 
-        (flet ((write-all (out)
-                          (dolist (line *TEXT*)
-                            (eval `(format ,out ,(concatenate 'string (car line) "~%") ,@(cdr line))))))
-          (if *out-file*
-            (with-open-file (out *out-file* :direction :output)
-                (write-all out))
-            (write-all *standard-output*)))))))
+        (format out "build all: phony lib v exe~%")
+        (format out "default all~%")
+
+        (when lib
+            (princ "build lib: phony" out)
+            (dolist (e (cdr lib))
+              (format out " ~a/~a" *lib-dir* (cdr e)))
+            (write-char #\Newline out))
+
+        (princ "build v: phony" out)
+        (dolist (e (cdr build))
+          (format out " ~a/~a~a" *build-dir* (pathname-name e) *VERILOG-EXT*))
+        (write-char #\Newline out)
+
+        (princ "build exe: phony" out)
+        (dolist (e (cdr build))
+          (format out " ~a/~a" *build-dir* (pathname-name e)))
+        (write-char #\Newline out)
+
+        (dolist (e (cdr build))
+          (format out "build ~a/~a~a: ~a ~a~%" *build-dir* (pathname-name e) *VERILOG-EXT* *TRANSLATE-RULE* e))
+
+        (dolist (e (cdr build))
+          (format out "build ~a/~a: ~a ~a/~a~a~%" *build-dir* (pathname-name e) *COMPILE-RULE* *build-dir* (pathname-name e) *VERILOG-EXT*))
+
+        (when lib
+          (dolist (e (cdr lib))
+            (format out "build ~a/~a: ~a ~a~%" *lib-dir* (cdr e) *MANGLE-RULE* (car e))))
+
+        (when module
+          (format out "build install: ~a" *DO-INSTALL-RULE* )
+          (dolist (e (cdr module))
+            (format out " ~a/~a~a" *build-dir* (pathname-name e) *VERILOG-EXT*))
+          (write-char #\Newline out)))))
+  
+  #+:debug
+  (let* ((hvl-list (check-use-and-test-bench hvl-files)))
+    (multiple-value-bind (lib-list main-list v-list) (make-lib-main-v-values hvl-list) 
+      #+:debug (print `(:list ,hvl-list ,lib-list ,main-list ,v-list))
+
+      (flet ((write-all (out)
+                        (dolist (line *TEXT*)
+                          (eval `(format ,out ,(concatenate 'string (car line) "~%") ,@(cdr line))))))
+        (if *out-file*
+          (with-open-file (out *out-file* :direction :output)
+              (write-all out))
+          (write-all *standard-output*))))))
 
 ;;; vim: set ft=lisp lisp:
