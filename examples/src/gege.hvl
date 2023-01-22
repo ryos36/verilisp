@@ -1,1 +1,9 @@
-(use ryos)
+(make-prologue)
+(when (eq *__name__* :__main__)
+    (use ryos)
+
+    (module tb()
+     (initial
+      (finish))))
+
+(make-epilogue)

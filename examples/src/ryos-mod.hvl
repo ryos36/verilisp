@@ -1,1 +1,6 @@
-(use sim-psram)
+(when (eq *__name__* :__main__)
+    (use sim-psram)
+
+    (module tb()
+     (initial
+      (finish))))

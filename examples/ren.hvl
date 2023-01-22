@@ -14,6 +14,7 @@
 
 (make-axis_m0 axis_m0 96)
 
+#|
 (defun do_cost_r (n)
     (car n)
     'aaa)
@@ -24,8 +25,7 @@
     
 (dolist (i (range 10))
     (eval `(module a ((input clk) (input rst)))))
-
-
+|#
 
 (module tb ()
  (reg clk)
@@ -36,6 +36,7 @@
     (= clk (! clk)))
 
  (reg tready)
+#|
  (wire b e f)
  (wire (8 d))
  (reg (96 cost_r))
@@ -56,10 +57,11 @@
     ;(eval `(assign ,(symcat `,i "_w") (ref inst ,(+ x 31) ,x)))
     (eval `(axis_m0 :name ,(symcat "axis_m0_" `,i) clk rst ,(symcat `,i "_w"))))
  ;(axis_m0 clk rst b c d e f)
+|#
  (initial
     (= clk 0)
     (dumpfile "abc.vcd")
-    (dumpvars 0 dut_axis_m0)
+    (dumpvars 0 tb)
     (# 200)
     (= rst 0)
 
