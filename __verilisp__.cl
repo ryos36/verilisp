@@ -1305,6 +1305,18 @@
     (write-string "]")
 )
 
+(defmacro v_cat* (&rest args)
+    ; concatenation:
+    ; (cat* 16 (cat (b 1 0))) -> {3 {'b0}}
+    (write-string "{")
+    (write-or-eval (car args))
+        (foreach arg (cdr args)
+            (write-or-eval arg)
+        )
+    (write-string "}")
+    nil
+)
+
 (defmacro v_cat (&rest args)
     ; concatenation:
     ; (cat fred george) -> {fred, george}

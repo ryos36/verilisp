@@ -60,7 +60,7 @@
 |#
  (initial
     (= clk 0)
-    (dumpfile "abc.vcd")
+    (dumpfile "vcd/abc.vcd")
     (dumpvars 0 tb)
     (# 200)
     (= rst 0)

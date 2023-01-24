@@ -114,7 +114,7 @@
  (axis_m0 :name dut_axis_m0 clk rst b tready d e f)
  (initial
     (= clk 0)
-    (dumpfile "abc.vcd")
+    (dumpfile "vcd/abc.vcd")
     (dumpvars 0 dut_axis_m0)
     (# 200)
     (= rst 0)

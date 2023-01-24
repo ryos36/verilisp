@@ -36,7 +36,7 @@ exec ros -Q -- $0 "$@"
 
 (defparameter *rule-file* "../scripts/rule.ninja")
 (defparameter *lib-dir* "lib")
-(defparameter *build-dir* "build")
+(defparameter *build-dir* "_build")
 (defparameter *v-dir* "v")
 (defparameter *out-file* "build.ninja")
 (defparameter *in-file* "build.kage")
@@ -177,7 +177,6 @@ exec ros -Q -- $0 "$@"
     props)
 
 ;----------------------------------------------------------------
-
 (defun main (&rest argv)
   (declare (ignorable argv))
   (setf argv (analyze-arg argv))

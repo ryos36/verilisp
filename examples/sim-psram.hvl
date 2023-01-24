@@ -3,18 +3,18 @@
 (defparameter *ADDR_WIDTH* 21)
 
 (defun make-psram-access-if (&optional (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
+  (let ((data-mask-width (l_/ data-width 8)))
     (copy-tree
         `((input init_calib_i)
           (input (,data-width rd_data_i))
           (input rd_data_valid_i)
 
           (output (,data-width wr_data_o))
-          (output wr_data_mask_o)
-          (output data_mask_o)
+          (output (,data-mask-width data_mask_o))
 
           (output (,addr-width addr_o))
           (output cmd_o)
-          (output cmd_en_o))))
+          (output cmd_en_o)))))
 
 
 ; sym から remove-postfix-lst をとりのぞき add-postfix する or
@@ -191,7 +191,7 @@
               :only-name t))
 
        (initial
-         (dumpfile "sim-psram.vcd")
+         (dumpfile "vcd/sim-psram.vcd")
          (dumpvars 0 tb)
 
          (= cmd_en_r 0)

@@ -23,7 +23,7 @@
      
      (wire ,@(make-wire-list-from-module 'make-psdma-module :ignore-sym-lst '(rst clk init_calib_i rd_data_i rd_data_valid_i wr_data_o wr_data_mask_o data_mask_o addr_o cmd_o cmd_en_o) :filter #'(lambda (x) (eq (car x) 'output))))
      
-     (wire init_calib_w (,*DATA_WIDTH* rd_data_w) rd_data_valid_w (,*DATA_WIDTH* wr_data_w) wr_data_mask_w data_mask_w (,*ADDR_WIDTH* addr_w) cmd_w cmd_en_w)
+     (wire init_calib_w (,*DATA_WIDTH* rd_data_w) rd_data_valid_w (,*DATA_WIDTH* wr_data_w) (,(l_/ *DATA_WIDTH* 8) data_mask_w) (,*ADDR_WIDTH* addr_w) cmd_w cmd_en_w)
      
      (psdma :name psdma0 clk rst ,@(make-wire-list-from-module 'make-psdma-module :only-name t))
 
@@ -34,7 +34,7 @@
               :only-name t))
      
      (initial
-         (dumpfile "sys-tb.vcd")
+         (dumpfile "vcd/sys-tb.vcd")
          (dumpvars 0 tb)
      
          (= read_addr_r (h ,*ADDR_WIDTH* 00_0000))
@@ -71,8 +71,24 @@
          (wait (== read_finished_w 0))
      
          (# 200)
+         (= read_req_r 1)
+         (wait (== read_req_ack_w 1))
+         (# 10)
+         (= read_req_r 0)
+         (# 10)
+         (wait (== read_req_ack_w 0))
+         (# 10)
+         (wait (== read_finished_w 1))
+     
+         (# 100)
+         (= read_finished_ack_r 1)
+     
+         (# 10)
+         (wait (== read_finished_w 0))
+     
+         (# 200)
+
          (finish)
-         )
-         ))
+         )))
 
 (make-epilogue)

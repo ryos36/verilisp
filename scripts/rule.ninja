@@ -2,7 +2,7 @@ verilisp = ../verilisp.py
 iverilog = iverilog
 iverilog_opt = -g2012
 lib_dir=./lib
-build_dir=./build
+build_dir=./_build
 
 rule translate
     depfile = $out.d

@@ -25,7 +25,7 @@ TEST_ON_ARGLESS = False
 NAMES_TO_MANGLE = [
     # special forms
      '@', 'fork', 'release', 'assign', 'deassign', 'task', 'function', '=', 'n=',
-    'delay', '#', 'wait', 'if', 'module', 'always', 'initial', 'cat', '.',
+    'delay', '#', 'wait', 'if', 'module', 'always', 'initial', 'cat', 'cat*', '.',
     'primitive', 'table', 'for', 'fromto', 'forallbits', 'ref', 'comment',
     'b', 'd', 'h', 'o',
 

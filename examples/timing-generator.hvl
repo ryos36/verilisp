@@ -100,7 +100,7 @@
      (tgen :name tgen0 clk rst hsync vsync he ve)
      (initial
         (= clk 0)
-        (dumpfile "tgen.vcd")
+        (dumpfile "vcd/tgen.vcd")
         (dumpvars 0 tgen0)
         (# 200)
         (= rst 0)
