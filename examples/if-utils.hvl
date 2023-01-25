@@ -1,0 +1,88 @@
+(make-prologue)
+
+(defun without-with-postfix (sym remove-postfix-lst add-postfix)
+  "sym から remove-postfix-lst をとりのぞき add-postfix する or
+   sym から remove-postfix-lst をとりのぞき 対応する add-postfix をつける
+   add-postfix が nil のばあい何もつけない "
+
+  (let* ((name (string-downcase (symbol-name sym)))
+         (name-len (length name))
+         (name-2 (subseq name 0 (l_- name-len 2)))
+         (last2 (subseq name (l_- name-len 2)))
+         (name-postfix (l_if (l_> name-len 2) last2))
+         (hit-postfix-position (position name-postfix (mapcar #'symbol-name remove-postfix-lst) :test #'string=))
+         (sym (symcat (l_if hit-postfix-position name-2 name) 
+            (l_if (listp add-postfix) (nth hit-postfix-position add-postfix) add-postfix))))
+    sym))
+
+(defun make-reverse-if (lst &optional rewrite)
+  (mapcar #'(lambda (x) 
+    (let* ((if-name (car x))
+           (vname-or-lst (cadr x))
+           (vname-car-lst (l_if (atom vname-or-lst) (cdr x) (cdadr x)))
+           (vname (car vname-car-lst))
+           (new-vname (without-with-postfix vname '(_i _o) '(_o _i)))
+           (alternative-if-name (cadr (member if-name '(input output input)))))
+      (assert alternative-if-name nil "inteface must be input or output. ~a" x)
+      #|
+      (print `(:ain ,alternative-if-name ,x ,(car x) ,
+        (let ((new-x (copy-tree x)))
+            (setf (car new-x) alternative-if-name)
+            new-x)) *error-output*)
+      |#
+      (setf (car x) alternative-if-name)
+      (setf (car vname-car-lst) new-vname)
+      x))
+      (l_if rewrite (copy-tree lst) lst)))
+
+;(reg a)
+;(reg (8 aa))
+;(reg (8 (4 ax)))
+
+(defun get-declare-name (v-name-lst)
+    (l_if (atom v-name-lst) (values v-name-lst nil nil)
+        (let ((data-width (car v-name-lst))
+              (v-name-lst (cadr v-name-lst)))
+            (l_if (atom v-name-lst) (values v-name-lst data-width nil)
+                (values (cadr v-name-lst) data-width (car v-name-lst))))))
+;
+(defun make-wire-list-from-if (if-list &key (filter #'(lambda (x) x)) (remove-postfix-lst '(_i _o)) (add-postfix '_w) (only-name nil))
+  (remove-if #'null
+    (mapcar #'(lambda (x) 
+                (multiple-value-bind (vname dwidth) (get-declare-name (cadr x))
+                  (let ((new-vname (l_if (funcall filter x)
+                                         (without-with-postfix vname remove-postfix-lst add-postfix))))
+                    (l_if new-vname
+                          (l_if (l_or only-name (null dwidth)) new-vname `(,dwidth ,new-vname)))))) if-list)))
+
+(defun make-assign-list-from-if (if-list &key (filter #'(lambda (x) (eq (car x) 'output))) (remove-postfix-lst '(_o)) (add-postfix '_r) add-src-postfix)
+  (remove-if #'null
+    (mapcar #'(lambda (x) 
+                (multiple-value-bind (vname dwidth) (get-declare-name (cadr x))
+                  (let ((src-vname (l_if add-src-postfix
+                                     (without-with-postfix vname remove-postfix-lst add-src-postfix) vname))
+                        (new-vname (l_if (funcall filter x)
+                                         (without-with-postfix vname remove-postfix-lst add-postfix))))
+                    (l_if new-vname `(assign ,src-vname ,new-vname))))) if-list)))
+
+;----------------------------------------------------------------
+(when (eq *__name__* :__main__)
+
+  (use clocks)
+  (make-clock clock)
+
+  (eval
+    `(module tb ()
+       (wire clk)
+       (reg= rst 0)
+
+       (clock :name clock0 clk)
+       (initial
+         (# 200 :pass)
+         (= rst 0)
+         (# 200) (= rst 1)
+         (# 200) (= rst 0)
+
+         (finish)))))
+
+(make-epilogue)

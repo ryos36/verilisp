@@ -5,6 +5,7 @@
 (defparameter *MAX_READ_WIDTH* 13) ; 8192
 
 (use axis)
+(use if-utils)
 
 ;----------------------------------------------------------------
 
@@ -229,6 +230,7 @@
 
         )))
 
+#|
 (defun without-with-postfix (sym remove-postfix-lst add-postfix)
   (let* ((name (string-downcase (symbol-name sym)))
          (name-len (length name))
@@ -238,6 +240,7 @@
          (hit-postfix (find name-postfix (mapcar #'symbol-name remove-postfix-lst) :test #'string=))
          (sym (symcat (l_if hit-postfix name-2 name) add-postfix)))
     sym))
+|#
     
 
 (defun make-wire-list-from-module (module-macro &key (ignore-sym-lst '(rst clk))(filter #'(lambda (x) x)) (remove-postfix-lst '(_i _o)) (add-postfix '_w) (only-name nil))
