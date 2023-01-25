@@ -1,0 +1,90 @@
+(make-prologue)
+
+(defun make-axis-sub-if (axi-name tdata-width)
+      (copy-tree
+        `((input ,(symcat axi-name 'tvalid))
+          (output ,(symcat axi-name 'tready))
+          (input (,tdata-width ,(symcat axi-name 'tdata)))
+          (input ,(symcat axi-name 'tuser))
+          (input ,(symcat axi-name 'tlast)))))
+
+(defun make-axis-main-if (axi-name tdata-width)
+      (copy-tree
+        `((output ,(symcat axi-name 'tvalid))
+          (input ,(symcat axi-name 'tready))
+          (output (,tdata-width ,(symcat axi-name 'tdata)))
+          (output ,(symcat axi-name 'tuser))
+          (output ,(symcat axi-name 'tlast)))))
+
+;----------------------------------------------------------------
+(defun make-axis-main-reg (axi-name tdata-width)
+      (copy-tree
+        `((reg= ,(symcat axi-name 'tvalid_r) 0)
+          (reg= (,tdata-width ,(symcat axi-name 'tdata_r)) (h 32 xxxx_xxxx))
+          (reg ,(symcat axi-name 'tuser_r))
+          (reg ,(symcat axi-name 'tlast_r))
+
+          ,@(mapcar #'(lambda (x) 
+                  `(assign ,(symcat axi-name x) ,(symcat axi-name x '_r)))
+                  '(tvalid tdata tuser tlast)))))
+
+;----------------------------------------------------------------
+(defun make-axis-wire (axi-name tdata-width &optional (postfix '_w))
+  (copy-tree
+   `((wire ,(symcat axi-name 'tvalid postfix ))
+     (wire ,(symcat axi-name 'tready postfix ))
+     (wire (,tdata-width ,(symcat axi-name 'tdata postfix)))
+     (wire ,(symcat axi-name 'tuser postfix))
+     (wire ,(symcat axi-name 'tlast postfix)))))
+
+;----------------------------------------------------------------
+(defun make-axis-name-list (axi-name tdata-width &optional (postfix '_w))
+  `(,(symcat axi-name 'tvalid postfix)
+    ,(symcat axi-name 'tready postfix)
+    ,(symcat axi-name 'tdata postfix)
+    ,(symcat axi-name 'tuser postfix)
+    ,(symcat axi-name 'tlast postfix)))
+
+;----------------------------------------------------------------
+(when (eq *__name__* :__main__)
+
+  ; just test interface
+  (defmacro make-axis-main (module-name axi-name tdata-width)
+    `(module ,module-name
+       ((input clk)
+        (input rst)
+
+        ,@(make-axis-main-if axi-name tdata-width))))
+
+  (defmacro make-axis-sub (module-name axi-name tdata-width)
+    `(module ,module-name
+       ((input clk)
+        (input rst)
+        ,@(make-axis-sub-if axi-name tdata-width))))
+
+  (make-axis-main test_axis_main test_ 8)
+  (make-axis-sub test_axis_sub test_ 8)
+
+  (use clocks)
+  (make-clock clock)
+
+  (let ((axis-name-list (make-axis-name-list 'test_ 8)))
+    (eval
+      `(module tb ()
+         (wire clk)
+         (reg= rst 0)
+         ,@(make-axis-wire 'test_ 8)
+       
+         (test_axis_main clk rst ,@axis-name-list)
+         (test_axis_sub  clk rst ,@axis-name-list)
+
+         (clock :name clock0 clk)
+         (initial
+           (# 200 :pass)
+           (= rst 0)
+           (# 200) (= rst 1)
+           (# 200) (= rst 0)
+
+           (finish))))))
+
+(make-epilogue)

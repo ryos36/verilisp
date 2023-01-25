@@ -4,50 +4,7 @@
 (defparameter *DATA_WIDTH* (l_* 4 *DQ_WIDTH*))
 (defparameter *MAX_READ_WIDTH* 13) ; 8192
 
-(defun make-axis-sub-if (axi-name tdata-width)
-      (copy-tree
-        `((input ,(symcat axi-name 'tvalid))
-          (output ,(symcat axi-name 'tready))
-          (input (,tdata-width ,(symcat axi-name 'tdata)))
-          (input ,(symcat axi-name 'tuser))
-          (input ,(symcat axi-name 'tlast)))))
-
-(defun make-axis-main-if (axi-name tdata-width)
-      (copy-tree
-        `((output ,(symcat axi-name 'tvalid))
-          (input ,(symcat axi-name 'tready))
-          (output (,tdata-width ,(symcat axi-name 'tdata)))
-          (output ,(symcat axi-name 'tuser))
-          (output ,(symcat axi-name 'tlast)))))
-
-;----------------------------------------------------------------
-(defun make-axis-main-reg (axi-name tdata-width)
-      (copy-tree
-        `((reg= ,(symcat axi-name 'tvalid_r) 0)
-          (reg= (,tdata-width ,(symcat axi-name 'tdata_r)) (h 32 xxxx_xxxx))
-          (reg ,(symcat axi-name 'tuser_r))
-          (reg ,(symcat axi-name 'tlast_r))
-
-          ,@(mapcar #'(lambda (x) 
-                  `(assign ,(symcat axi-name x) ,(symcat axi-name x '_r)))
-                  '(tvalid tdata tuser tlast)))))
-
-;----------------------------------------------------------------
-(defun make-axis-wire (axi-name tdata-width &optional (postfix '_w))
-  (copy-tree
-   `((wire ,(symcat axi-name 'tvalid postfix ))
-     (wire ,(symcat axi-name 'tready postfix ))
-     (wire (,tdata-width ,(symcat axi-name 'tdata postfix)))
-     (wire ,(symcat axi-name 'tuser postfix))
-     (wire ,(symcat axi-name 'tlast postfix)))))
-
-;----------------------------------------------------------------
-(defun make-axis-name-list (axi-name tdata-width &optional (postfix '_w))
-  `(,(symcat axi-name 'tvalid postfix)
-    ,(symcat axi-name 'tready postfix)
-    ,(symcat axi-name 'tdata postfix)
-    ,(symcat axi-name 'tuser postfix)
-    ,(symcat axi-name 'tlast postfix)))
+(use axis)
 
 ;----------------------------------------------------------------
 

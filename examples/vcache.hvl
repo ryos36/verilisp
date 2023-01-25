@@ -1,0 +1,126 @@
+
+(make-prologue)
+
+(defparameter *J1A-DATA-WIDTH* 16)
+(defparameter *VCACHE-PIXEL-BYTES* 4)
+(defparameter *VCACHE-WIDTH* 64) ; pixel
+(defparameter *VCACHE-HEIGHT* 32) ; pixel
+
+(defparameter *RAM-ADDR-WIDTH* 21)
+(defparameter *RAM-DATA-WIDTH* 64)
+
+(defun make-axis-sub-if (axi-name tdata-width)
+      (copy-tree
+        `((input ,(symcat axi-name 'tvalid))
+          (output ,(symcat axi-name 'tready))
+          (input (,tdata-width ,(symcat axi-name 'tdata)))
+          (input ,(symcat axi-name 'tuser))
+          (input ,(symcat axi-name 'tlast)))))
+
+(defun make-axis-main-if (axi-name tdata-width)
+      (copy-tree
+        `((output ,(symcat axi-name 'tvalid))
+          (input ,(symcat axi-name 'tready))
+          (output (,tdata-width ,(symcat axi-name 'tdata)))
+          (output ,(symcat axi-name 'tuser))
+          (output ,(symcat axi-name 'tlast)))))
+
+;----------------------------------------------------------------
+(defun make-axis-main-reg (axi-name tdata-width)
+      (copy-tree
+        `((reg= ,(symcat axi-name 'tvalid_r) 0)
+          (reg= (,tdata-width ,(symcat axi-name 'tdata_r)) (h 32 xxxx_xxxx))
+          (reg ,(symcat axi-name 'tuser_r))
+          (reg ,(symcat axi-name 'tlast_r))
+
+          ,@(mapcar #'(lambda (x) 
+                  `(assign ,(symcat axi-name x) ,(symcat axi-name x '_r)))
+                  '(tvalid tdata tuser tlast)))))
+
+;----------------------------------------------------------------
+(defun make-axis-wire (axi-name tdata-width &optional (postfix '_w))
+  (copy-tree
+   `((wire ,(symcat axi-name 'tvalid postfix ))
+     (wire ,(symcat axi-name 'tready postfix ))
+     (wire (,tdata-width ,(symcat axi-name 'tdata postfix)))
+     (wire ,(symcat axi-name 'tuser postfix))
+     (wire ,(symcat axi-name 'tlast postfix)))))
+
+;----------------------------------------------------------------
+(defun make-axis-name-list (axi-name tdata-width &optional (postfix '_w))
+  `(,(symcat axi-name 'tvalid postfix)
+    ,(symcat axi-name 'tready postfix)
+    ,(symcat axi-name 'tdata postfix)
+    ,(symcat axi-name 'tuser postfix)
+    ,(symcat axi-name 'tlast postfix)))
+
+;----------------------------------------------------------------
+
+(defmacro make-vcache-module (module-name &optional 
+    (j1a-data-width *J1A-DATA-WIDTH*)
+    (vcache-width *VCACHE-WIDTH*)
+    (vcache-height *VCACHE-HEIGHT*)
+    (vcache-pixel-bytes *VCACHE-PIXEL-BYTES*)
+    (beat-n 32) 
+    (ram-data-width *RAM_DATA_WIDTH*) 
+    (ram-addr-width *RAM_ADDR_WIDTH*))
+  (let* ((vcache-bytes (l_* vcache-pixel-bytes vcache-width vcache-width))
+         (j1a-addr-width (floor (l_log (floor vcache-bytes j1a-data-width)) (l_log 2)))
+         (data-mask-width (l_/ data-width 8))
+         (one-read-bytes (l_* (l_/ data-width 8) beat-n))
+         (beat-n-bit-width (l_+ (floor (l_log beat-n) (l_log 2.0)) 1)))
+    `(module ,module-name 
+        ((input clk)
+         (input rst)
+
+         ; Interface for j1a 
+         (input io_rd)
+         (input io_wr)
+
+         (input (,j1a-addr-width io_mem_addr))
+         (input io_mem_wr)
+         (input (,j1a-data-width io_wr_data))
+         (output (,j1a-data-width io_rd_data))
+
+         ; Cache I/F
+         (input req_read_from_ram)
+         (input (,ram-addr-width req_read_start_addr))
+         (input (,vcache-height req_read_update_vcache_line))
+         (output req_read_from_ram_ack)
+
+         (input (,req_write_into_ram))
+         (input (,vcache-height req_write_flush_vcache_line))
+         (output (,req_write_into_ram_ack))
+
+         (output (,vcache-height vcache_durty_line))
+
+         ; psdma I/F
+
+         (output (2 error_o)))
+                    )))
+
+;----------------------------------------------------------------
+(defparameter *DEFINE-WORD* "TEST_BENCH")
+(defmacro tb-main (expr &rest body)
+  `(when ,expr
+      (format t "`ifdef ~a~%" *DEFINE-WORD*)
+      ,@body 
+      (format t "`endif~%")))
+  
+;----------------------------------------------------------------
+
+(tb-main (eq *__name__* :__main__)
+  (use clocks)
+  (setf *transport-delay* 1)
+
+  (make-clock clock)
+
+  (module tb()
+    (initial
+      (dumpfile "vcd/vcache.vcd")
+      (dumpvars 0 tb)
+
+      (# 200)
+      (finish))))
+
+(make-epilogue)

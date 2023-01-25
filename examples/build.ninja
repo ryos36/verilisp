@@ -2,12 +2,10 @@ include ../scripts/rule.ninja
 install_dir = /tmp/install
 build all: phony lib v exe
 default all
-build lib: phony lib/gege.hvlib lib/sim-psram.hvlib lib/psdma.hvlib
-build v: phony _build/timing-generator.v _build/test.v _build/sys-tb.v _build/ryos-mod.v _build/gege.v _build/sim_count.v _build/sim-psram.v _build/ren.v _build/psdma.v _build/macro_sim_count.v _build/image_to_axis.v _build/axis-test.v _build/vcache.v
-build exe: phony _build/timing-generator _build/test _build/sys-tb _build/ryos-mod _build/gege _build/sim_count _build/sim-psram _build/ren _build/psdma _build/macro_sim_count _build/image_to_axis _build/axis-test _build/vcache
-build lib/gege.hvlib: mangle-translate src/gege.hvl
-build lib/sim-psram.hvlib: mangle-translate sim-psram.hvl
-build lib/psdma.hvlib: mangle-translate psdma.hvl
+build lib: phony lib/gege.hvlib lib/sim-psram.hvlib lib/psdma.hvlib lib/axis.hvlib
+build v: phony _build/vcache.v _build/timing-generator.v _build/test.v _build/sys-tb.v _build/ryos-mod.v _build/gege.v _build/sim_count.v _build/sim-psram.v _build/ren.v _build/psdma.v _build/macro_sim_count.v _build/image_to_axis.v _build/axis.v
+build exe: phony _build/vcache _build/timing-generator _build/test _build/sys-tb _build/ryos-mod _build/gege _build/sim_count _build/sim-psram _build/ren _build/psdma _build/macro_sim_count _build/image_to_axis _build/axis
+build _build/vcache.v: translate vcache.hvl
 build _build/timing-generator.v: translate timing-generator.hvl
 build _build/test.v: translate test.hvl
 build _build/sys-tb.v: translate sys-tb.hvl
@@ -19,7 +17,8 @@ build _build/ren.v: translate ren.hvl
 build _build/psdma.v: translate psdma.hvl
 build _build/macro_sim_count.v: translate macro_sim_count.hvl
 build _build/image_to_axis.v: translate image_to_axis.hvl
-build _build/axis-test.v: translate axis-test.hvl
+build _build/axis.v: translate axis.hvl
+build _build/vcache: compile _build/vcache.v
 build _build/timing-generator: compile _build/timing-generator.v
 build _build/test: compile _build/test.v
 build _build/sys-tb: compile _build/sys-tb.v
@@ -31,7 +30,9 @@ build _build/ren: compile _build/ren.v
 build _build/psdma: compile _build/psdma.v
 build _build/macro_sim_count: compile _build/macro_sim_count.v
 build _build/image_to_axis: compile _build/image_to_axis.v
-build _build/axis-test: compile _build/axis-test.v
-build _build/vcache.v: translate vcache.hvl
-build _build/vcache: compile _build/vcache.v
+build _build/axis: compile _build/axis.v
+build lib/gege.hvlib: mangle-translate src/gege.hvl
+build lib/sim-psram.hvlib: mangle-translate sim-psram.hvl
+build lib/psdma.hvlib: mangle-translate psdma.hvl
+build lib/axis.hvlib: mangle-translate axis.hvl
 build install: do-install _build/ryos-mod.v
