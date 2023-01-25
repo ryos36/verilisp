@@ -13,7 +13,7 @@ rule mangle-translate
     command = $verilisp --mangle --dir $lib_dir $in
 
 rule compile
-    command = $iverilog $iverilog_opt -o $out $in
+    command = $iverilog -DTEST_BENCH $iverilog_opt -o $out $in
 
 rule do-install
     command = echo copy $in into $install_dir

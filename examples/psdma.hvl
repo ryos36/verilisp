@@ -60,8 +60,6 @@
           (output ,(symcat name 'finished))
           (input ,(symcat name 'finished_ack))
 
-          (input ,(symcat name 'almost_full_i))
-
           ,(l_if use-for-video `(input ,(symcat name 'is_first_line)))
 
           ,@(make-axis-main-if name data-width))))
@@ -74,8 +72,6 @@
           (output ,(symcat name 'req_ack))
           (output ,(symcat name 'finished))
           (input ,(symcat name 'finished_ack))
-
-          (input ,(symcat name 'line_data_ready_i))
 
           ,@(make-axis-sub-if name data-width))))
 
@@ -169,7 +165,6 @@
                 ; Start Read REQ
                 (#b00001
                     (if (| (== read_req 0) (== read_req_ack_r 0))
-                        ; assert (! read_almost_full_i)
                        (progn
                          ; assert (== read_tready 1)
                          (<=# read_req_ack_r 0)
@@ -233,7 +228,6 @@
                 ; Start Write REQ
                 (#b10000
                     (if (| (== write_req 0) (== write_req_ack_r 0))
-                        ; assert write_line_data_ready_i)
                        (progn
                          (<=# write_req_ack_r 0)
                          (<=# psram_cmd_en_r 1)
@@ -255,7 +249,7 @@
 
                     (if (== read_counter 0)
                       (progn
-                        (<=# write_tready_r 1)
+                        (<=# write_tready_r 0)
                         (<=# psman_status #b10011))
                       (<=# read_counter (- read_counter 1))))
 
@@ -382,8 +376,6 @@
           (output ,(symcat name 'req_ack))
           (output ,(symcat name 'finished))
           (input ,(symcat name 'finished_ack))
-
-          (input ,(symcat name 'almost_full_i))
 |#
 
     (initial
@@ -395,7 +387,6 @@
         (= read_bytes_r ,(l_* 640 4))
         (= read_req_r 0)
         (= read_finished_ack_r 0)
-        (= read_almost_full_r 0)
 
         (# 200 :pass)
         (= rst 0)

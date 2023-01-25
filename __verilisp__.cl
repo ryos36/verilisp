@@ -2081,7 +2081,10 @@
 )
 
 
-
+(defun v_assert (assert-expr)
+    (write-string "assert(")
+    (write-or-eval assert-expr)
+    (write-string ");"))
 
 ;;; END VERILISP LANGUAGE
 ;;; BEGIN PROCESSING OF STDIN
