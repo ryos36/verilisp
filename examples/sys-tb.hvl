@@ -5,6 +5,7 @@
 (use clocks)
 (use psdma)
 (use sim-psram)
+(use if-utils)
 
 (make-psdma-module psdma)
 (make-clock clock)

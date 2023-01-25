@@ -15,7 +15,8 @@
             (l_if (listp add-postfix) (nth hit-postfix-position add-postfix) add-postfix))))
     sym))
 
-(defun make-reverse-if (lst &optional rewrite)
+;----------------------------------------------------------------
+(defun make-reverse-if (lst &optional over-write)
   (mapcar #'(lambda (x) 
     (let* ((if-name (car x))
            (vname-or-lst (cadr x))
@@ -33,8 +34,9 @@
       (setf (car x) alternative-if-name)
       (setf (car vname-car-lst) new-vname)
       x))
-      (l_if rewrite (copy-tree lst) lst)))
+      (l_if over-write lst (copy-tree lst))))
 
+;----------------------------------------------------------------
 ;(reg a)
 ;(reg (8 aa))
 ;(reg (8 (4 ax)))
@@ -45,7 +47,8 @@
               (v-name-lst (cadr v-name-lst)))
             (l_if (atom v-name-lst) (values v-name-lst data-width nil)
                 (values (cadr v-name-lst) data-width (car v-name-lst))))))
-;
+
+;----------------------------------------------------------------
 (defun make-wire-list-from-if (if-list &key (filter #'(lambda (x) x)) (remove-postfix-lst '(_i _o)) (add-postfix '_w) (only-name nil))
   (remove-if #'null
     (mapcar #'(lambda (x) 
@@ -55,6 +58,7 @@
                     (l_if new-vname
                           (l_if (l_or only-name (null dwidth)) new-vname `(,dwidth ,new-vname)))))) if-list)))
 
+;----------------------------------------------------------------
 (defun make-assign-list-from-if (if-list &key (filter #'(lambda (x) (eq (car x) 'output))) (remove-postfix-lst '(_o)) (add-postfix '_r) add-src-postfix)
   (remove-if #'null
     (mapcar #'(lambda (x) 
@@ -66,23 +70,73 @@
                     (l_if new-vname `(assign ,src-vname ,new-vname))))) if-list)))
 
 ;----------------------------------------------------------------
+(defun make-if-list-from-module (module-macro &key (ignore-sym-lst '(rst clk)))
+  (let ((args (caddr (macroexpand-1 `(,module-macro anon)))))
+     (remove-if #'null
+        (mapcar #'(lambda (x)
+           (let* ((vname-or-lst (cadr x))
+                  (vname (l_if (atom vname-or-lst) vname-or-lst (cadr vname-or-lst)))
+                  (hit_flag (l_not (find vname ignore-sym-lst))))
+             (l_if hit_flag x))) args))))
+
+;----------------------------------------------------------------
+(defun make-wire-list-from-module (module-macro &key (ignore-sym-lst '(rst clk)) (filter #'(lambda (x) x)) (remove-postfix-lst '(_i _o)) (add-postfix '_w) (only-name nil))
+  (make-wire-list-from-if (make-if-list-from-module module-macro :ignore-sym-lst ignore-sym-lst) :filter filter :remove-postfix-lst remove-postfix-lst :add-postfix add-postfix :only-name only-name))
+
+;----------------------------------------------------------------
+(defun make-reg-wire-assign (module-macro &key (ignore-sym-lst '(clk rst)))
+    (let ((my-wires `(wire ,@(make-wire-list-from-module module-macro :filter #'(lambda (x) (eq (car x) 'input)) :ignore-sym-lst ignore-sym-lst)))
+          (my-regs `(reg ,@(make-wire-list-from-module module-macro :filter #'(lambda (x) (eq (car x) 'input)) :add-postfix '_r :ignore-sym-lst ignore-sym-lst))))
+          `(,my-wires ,my-regs 
+              ,@(mapcar #'(lambda (x) `(assign ,(symcat x 'w) ,(symcat x 'r)))
+                  (make-wire-list-from-module module-macro :filter 
+                                          #'(lambda (x) (eq (car x) 'input))
+                                          :only-name t
+                                          :add-postfix '_
+                                          :ignore-sym-lst ignore-sym-lst)))))
+
+;----------------------------------------------------------------
 (when (eq *__name__* :__main__)
 
   (use clocks)
   (make-clock clock)
 
-  (eval
-    `(module tb ()
-       (wire clk)
-       (reg= rst 0)
+  (defmacro make-test1-module (module-name)
+    `(module ,module-name
+       ((input clk)
+        (input rst)
 
-       (clock :name clock0 clk)
-       (initial
-         (# 200 :pass)
-         (= rst 0)
-         (# 200) (= rst 1)
-         (# 200) (= rst 0)
+        (input test_a_i)
+        (output test_b_o))))
 
-         (finish)))))
+  (defmacro make-test2-module (module-name)
+    `(module ,module-name
+       ((input clk)
+        (input rst)
+
+        ,@(make-reverse-if (make-if-list-from-module 'make-test1-module)))))
+
+  (make-test1-module test1)
+  (make-test2-module test2)
+
+  (let ((if-lst (make-wire-list-from-module 'make-test2-module) ))
+    (eval
+      `(module tb ()
+         (wire clk)
+         (reg= rst 0)
+         (wire ,@if-lst)
+  
+         (test1 :name test0 clk rst ,@if-lst)
+         (test2 :name test1 clk rst ,@if-lst)
+
+         (clock :name clock0 clk)
+  
+         (initial
+           (# 200 :pass)
+           (= rst 0)
+           (# 200) (= rst 1)
+           (# 200) (= rst 0)
+  
+           (finish))))))
 
 (make-epilogue)
