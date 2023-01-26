@@ -2041,7 +2041,7 @@
 (foreach format '(d b h o)
     (eval
         `(defmacro ,(mangle format) (size num)
-            (assert (< num (expt 2 size)) nil "num ~a must be less than ~a since size is ~a" num (expt 2 size) size)
+            (assert (or (not (numberp num)) (< num (expt 2 size))) nil "num ~a must be less than ~a since size is ~a" num (expt 2 size) size)
             (write size)
             (write-string "'")
             (write ',format)
