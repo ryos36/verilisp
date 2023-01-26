@@ -1,8 +1,22 @@
 (make-prologue)
 
+;----------------------------------------------------------------
+;(reg a)
+;(reg (8 aa))
+;(reg (8 (4 ax)))
+
+(defun get-declare-name (v-name-lst)
+    (l_if (atom v-name-lst) (values v-name-lst nil nil)
+        (let ((data-width (car v-name-lst))
+              (v-name-lst (cadr v-name-lst)))
+            (l_if (atom v-name-lst) (values v-name-lst data-width nil)
+                (values (cadr v-name-lst) data-width (car v-name-lst))))))
+
 (defun without-with-postfix (sym remove-postfix-lst add-postfix)
   "sym から remove-postfix-lst をとりのぞき add-postfix する or
    sym から remove-postfix-lst をとりのぞき 対応する add-postfix をつける
+   sym から remove-postfix-lst をとりのぞけなく、かつ add-postfix が
+   リストなら何もつけない
    add-postfix が nil のばあい何もつけない "
 
   (let* ((name (string-downcase (symbol-name sym)))
@@ -12,7 +26,9 @@
          (name-postfix (l_if (l_> name-len 2) last2))
          (hit-postfix-position (position name-postfix (mapcar #'symbol-name remove-postfix-lst) :test #'string=))
          (sym (symcat (l_if hit-postfix-position name-2 name) 
-            (l_if (listp add-postfix) (nth hit-postfix-position add-postfix) add-postfix))))
+            (l_if (listp add-postfix) 
+                (l_if hit-postfix-position
+                    (nth hit-postfix-position add-postfix)) add-postfix))))
     sym))
 
 ;----------------------------------------------------------------
@@ -35,18 +51,6 @@
       (setf (car vname-car-lst) new-vname)
       x))
       (l_if over-write lst (copy-tree lst))))
-
-;----------------------------------------------------------------
-;(reg a)
-;(reg (8 aa))
-;(reg (8 (4 ax)))
-
-(defun get-declare-name (v-name-lst)
-    (l_if (atom v-name-lst) (values v-name-lst nil nil)
-        (let ((data-width (car v-name-lst))
-              (v-name-lst (cadr v-name-lst)))
-            (l_if (atom v-name-lst) (values v-name-lst data-width nil)
-                (values (cadr v-name-lst) data-width (car v-name-lst))))))
 
 ;----------------------------------------------------------------
 (defun make-wire-list-from-if (if-list &key (filter #'(lambda (x) x)) (remove-postfix-lst '(_i _o)) (add-postfix '_w) (only-name nil))
@@ -78,6 +82,20 @@
                   (vname (l_if (atom vname-or-lst) vname-or-lst (cadr vname-or-lst)))
                   (hit_flag (l_not (find vname ignore-sym-lst))))
              (l_if hit_flag x))) args))))
+
+;----------------------------------------------------------------
+(defun show-module-if (module-macro &optional (out *error-output*))
+    (print `(:view-module ,(make-if-list-from-module module-macro)) out))
+
+;----------------------------------------------------------------
+(defun show-module-reg (module-macro &optional reg-name (out *error-output*))
+  (let ((body (cdddr (macroexpand-1 `(,module-macro anon)))))
+    (dolist (expr body)
+      ;(print `(:hello ,expr) out)
+      (when (eq (car expr) 'v_reg)
+        (dolist (v (cdr expr))
+          (l_if (eq (get-declare-name v) reg-name)
+            (print `(:expr ,v) out)))))))
 
 ;----------------------------------------------------------------
 (defun make-wire-list-from-module (module-macro &key (ignore-sym-lst '(rst clk)) (filter #'(lambda (x) x)) (remove-postfix-lst '(_i _o)) (add-postfix '_w) (only-name nil))
