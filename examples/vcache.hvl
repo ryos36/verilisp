@@ -2,102 +2,307 @@
 (make-prologue)
 
 (defparameter *J1A-DATA-WIDTH* 16)
+(defparameter *J1A-ADDR-WIDTH* 16)
 (defparameter *VCACHE-PIXEL-BYTES* 4)
 (defparameter *VCACHE-WIDTH* 64) ; pixel
 (defparameter *VCACHE-HEIGHT* 32) ; pixel
 
 (defparameter *RAM-ADDR-WIDTH* 21)
 (defparameter *RAM-DATA-WIDTH* 64)
+(defparameter *VRAM-LINE-STRIDE* (l_* 1024 *VCACHE-PIXEL-BYTES*))
 
-(defun make-axis-sub-if (axi-name tdata-width)
-      (copy-tree
-        `((input ,(symcat axi-name 'tvalid))
-          (output ,(symcat axi-name 'tready))
-          (input (,tdata-width ,(symcat axi-name 'tdata)))
-          (input ,(symcat axi-name 'tuser))
-          (input ,(symcat axi-name 'tlast)))))
-
-(defun make-axis-main-if (axi-name tdata-width)
-      (copy-tree
-        `((output ,(symcat axi-name 'tvalid))
-          (input ,(symcat axi-name 'tready))
-          (output (,tdata-width ,(symcat axi-name 'tdata)))
-          (output ,(symcat axi-name 'tuser))
-          (output ,(symcat axi-name 'tlast)))))
+(use axis)
+(use psdma)
 
 ;----------------------------------------------------------------
-(defun make-axis-main-reg (axi-name tdata-width)
-      (copy-tree
-        `((reg= ,(symcat axi-name 'tvalid_r) 0)
-          (reg= (,tdata-width ,(symcat axi-name 'tdata_r)) (h 32 xxxx_xxxx))
-          (reg ,(symcat axi-name 'tuser_r))
-          (reg ,(symcat axi-name 'tlast_r))
-
-          ,@(mapcar #'(lambda (x) 
-                  `(assign ,(symcat axi-name x) ,(symcat axi-name x '_r)))
-                  '(tvalid tdata tuser tlast)))))
-
-;----------------------------------------------------------------
-(defun make-axis-wire (axi-name tdata-width &optional (postfix '_w))
-  (copy-tree
-   `((wire ,(symcat axi-name 'tvalid postfix ))
-     (wire ,(symcat axi-name 'tready postfix ))
-     (wire (,tdata-width ,(symcat axi-name 'tdata postfix)))
-     (wire ,(symcat axi-name 'tuser postfix))
-     (wire ,(symcat axi-name 'tlast postfix)))))
-
-;----------------------------------------------------------------
-(defun make-axis-name-list (axi-name tdata-width &optional (postfix '_w))
-  `(,(symcat axi-name 'tvalid postfix)
-    ,(symcat axi-name 'tready postfix)
-    ,(symcat axi-name 'tdata postfix)
-    ,(symcat axi-name 'tuser postfix)
-    ,(symcat axi-name 'tlast postfix)))
-
-;----------------------------------------------------------------
-
-(defmacro make-vcache-module (module-name &optional 
+(defmacro make-vcache-module (module-name &key 
     (j1a-data-width *J1A-DATA-WIDTH*)
+    (j1a-addr-width *J1A-ADDR-WIDTH*)
     (vcache-width *VCACHE-WIDTH*)
     (vcache-height *VCACHE-HEIGHT*)
     (vcache-pixel-bytes *VCACHE-PIXEL-BYTES*)
     (beat-n 32) 
-    (ram-data-width *RAM_DATA_WIDTH*) 
-    (ram-addr-width *RAM_ADDR_WIDTH*))
-  (let* ((vcache-bytes (l_* vcache-pixel-bytes vcache-width vcache-width))
-         (j1a-addr-width (floor (l_log (floor vcache-bytes j1a-data-width)) (l_log 2)))
-         (data-mask-width (l_/ data-width 8))
-         (one-read-bytes (l_* (l_/ data-width 8) beat-n))
-         (beat-n-bit-width (l_+ (floor (l_log beat-n) (l_log 2.0)) 1)))
+    (ram-data-width *RAM-DATA-WIDTH*) 
+    (ram-addr-width *RAM-ADDR-WIDTH*)
+    (vram-line-stride *VRAM-LINE-STRIDE*)
+    (use-j1a-if t))
+  (let* ((vcache-line-bytes (l_* vcache-pixel-bytes vcache-width))
+         (vcache-bytes (l_* vcache-line-bytes vcache-height))
+
+         ;(j1a-addr-width (floor (l_log (floor vcache-bytes j1a-data-width)) (l_log 2)))
+         (cache-data-width j1a-data-width)
+         (cache-data-n (floor ram-data-width cache-data-width))
+         (cache-data-size-by-ram (floor (l_* vcache-bytes 8) ram-data-width))
+         (cache-data-width-by-ram (floor (l_log cache-data-size-by-ram) (l_log 2)))
+         (cache-data-size (floor (l_* vcache-bytes 8) cache-data-width))
+         (j1a-access-bit-pos (floor (l_log cache-data-size) (l_log 2)))
+         (height-bit-width (floor (l_log vcache-height) (l_log 2)))
+         ;(data-mask-width (l_/ data-width 8))
+         ;(one-read-bytes (l_* (l_/ data-width 8) beat-n))
+         (beat-n-bit-width (floor (l_log beat-n) (l_log 2.0))))
+         (assert (l_= cache-data-width-by-ram (l_+ height-bit-width beat-n-bit-width)))
+
     `(module ,module-name 
         ((input clk)
          (input rst)
 
          ; Interface for j1a 
-         (input io_rd)
-         (input io_wr)
-
-         (input (,j1a-addr-width io_mem_addr))
-         (input io_mem_wr)
-         (input (,j1a-data-width io_wr_data))
-         (output (,j1a-data-width io_rd_data))
+         ,@(when use-j1a-if
+            `((input io_rd)
+              (input io_wr)
+              (input (,j1a-addr-width io_mem_addr))
+              (input (,j1a-data-width io_wr_data))
+              (output (,j1a-data-width io_rd_data))))
 
          ; Cache I/F
-         (input req_read_from_ram)
+         (input req_read_from_ram_valid)
          (input (,ram-addr-width req_read_start_addr))
          (input (,vcache-height req_read_update_vcache_line))
-         (output req_read_from_ram_ack)
+         (output req_read_from_ram_ready)
 
-         (input (,req_write_into_ram))
+         (input req_write_into_ram_valid)
          (input (,vcache-height req_write_flush_vcache_line))
-         (output (,req_write_into_ram_ack))
+         (output req_write_into_ram_ready)
 
          (output (,vcache-height vcache_durty_line))
 
-         ; psdma I/F
+         (output processing)
+         (output busy)
+
+         ; psdma read I/F
+         ,@(make-psdma-read-access-if 'read_)
+
+         ; psdma write I/F
+         ,@(make-psdma-write-access-if 'write_)
+
+         (output (16 cache_mem16_0))
 
          (output (2 error_o)))
-                    )))
+
+        ,@(let ((i 0)) (mapcar #'(lambda (x) (let ((rv i)) (incf i) 
+            `(reg (,cache-data-width (,cache-data-size-by-ram ,(symcat 'cache_mem rv)))))) (make-list cache-data-n)))
+
+        (wire cache_mem_access)
+        (assign cache_mem_access (ref io_mem_addr ,j1a-access-bit-pos))
+        (reg (,j1a-data-width io_rd_data_r))
+        (assign io_rd_data io_rd_data_r)
+
+        ;----------------------------------------------------------------
+        (reg (,ram-addr-width read_start_addr_r))
+        (reg (,ram-addr-width iter_addr_r))
+        (reg (,vcache-height iter_vcache_line_r))
+
+        (reg= (,beat-n-bit-width beat_count) 0)
+        (reg= (,height-bit-width vcount) 0)
+
+        ;----------------------------------------------------------------
+        (reg= req_read_from_ram_ready_r 0)
+        (assign req_read_from_ram_ready req_read_from_ram_ready_r)
+
+        (reg= read_req_r 0)
+        (assign read_req read_req_r)
+        (assign read_addr iter_addr_r)
+        (assign read_bytes ,vcache-line-bytes)
+
+        (reg= read_tready_r 0)
+        (assign read_tready read_tready_r)
+
+        (reg= read_finished_ack_r 0)
+        (assign read_finished_ack read_finished_ack_r)
+
+        ;----------------------------------------------------------------
+        (reg= req_write_into_ram_ready_r 0)
+        (assign req_write_into_ram_ready req_write_into_ram_ready_r)
+
+        (reg= write_req_r 0)
+        (assign write_req write_req_r)
+        (assign write_addr iter_addr_r)
+        (assign write_bytes ,vcache-line-bytes)
+
+        (wire (,cache-data-width-by-ram vcache_addr_w))
+        (assign vcache_addr_w (~ (cat vcount beat_count)))
+
+        (reg= write_tvalid_r 0)
+        (assign write_tvalid write_tvalid_r)
+        (assign write_tdata write_tvalid_r)
+
+        (reg (,ram-data-width write_tdata_r))
+
+        (reg= write_finished_ack_r 0)
+        (assign write_finished_ack write_finished_ack_r)
+
+        (reg now_writing_r)
+        ;----------------------------------------------------------------
+        (reg= (5 status) 0)
+
+        (assign cache_mem16_0 (ref cache_mem0 0))
+        (assign busy (& (!= status #b00000) (!= status #b01110) (!= status #b10100)))
+        (assign processing (| vcount))
+
+        (always ((posedge clk))
+          (case status
+            ((#b00000 #b11011)
+              (cond
+                ((& io_wr cache_mem_access)
+                   (case (ref io_mem_addr 1 0)
+                     ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i)) (incf i)
+                       `(,old-i (<=# (ref ,(symcat 'cache_mem old-i) (& (ref io_mem_addr ,(l_- cache-data-width 1) 2) ,(l_- cache-data-size-by-ram 1))) io_wr_data ))))
+                           (make-list cache-data-n)))))
+                ((& io_rd cache_mem_access)
+                 (display "io_rd," io_rd "," cache_mem_access "," io_mem_addr)
+                   (case (ref io_mem_addr 1 0)
+                    ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i)) (incf i)
+                       `(,old-i (<=# io_rd_data_r (ref ,(symcat 'cache_mem old-i) (& (ref io_mem_addr ,(l_- cache-data-width 1) 2) ,(l_- cache-data-size-by-ram 1)))))))
+                          (make-list cache-data-n)))))
+
+                (processing
+                  (if now_writing_r
+                    (<=# status #b10000)
+                    (<=# status #b00001)))
+                  
+
+                (req_read_from_ram_valid
+                  (<=# now_writing_r 0)
+                  (<=# req_read_from_ram_ready_r 1)
+                  (<=# read_start_addr_r req_read_start_addr)
+                  (<=# iter_addr_r req_read_start_addr)
+                  (<=# iter_vcache_line_r req_read_update_vcache_line)
+                  (<=# vcount ,(l_- vcache-height 1))
+                  (<=# status #b00001))
+
+                (req_write_into_ram_valid
+                  (<=# now_writing_r 1)
+                  (<=# req_write_into_ram_ready_r 1)
+                  (<=# iter_addr_r read_start_addr_r)
+                  (<=# iter_vcache_line_r req_write_flush_vcache_line)
+                  (<=# vcount ,(l_- vcache-height 1))
+                  (<=# status #b10000))))
+
+            (#b00001
+              (<=# req_read_from_ram_ready_r 0)
+              (if (ref iter_vcache_line_r 0)
+                (progn
+                  (<=# read_req_r 1)
+                  (<=# status #b00011))
+                (<=# status #b01110)))
+
+            (#b00011
+              (if read_req_ack 
+                (progn
+                  (<=# read_tready_r 1)
+                  (<=# beat_count (b ,beat-n-bit-width ,(l_- beat-n 1)))
+                  (<=# read_req_r 0)
+                  (<=# status #b00010))))
+
+            (#b00010
+              (if read_tvalid   
+                (progn
+                  ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i) (i16 (l_* i 16)) (i16+15 (l_+ i16 15))) (incf i)
+                      `(<=# (ref ,(symcat 'cache_mem old-i) vcache_addr_w) (ref read_tdata ,i16+15 ,i16))))
+                          (make-list cache-data-n)))
+                  (<=# beat_count (- beat_count 1))
+                  (<=# status #b00110))))
+
+            (#b00110
+              (if (== beat_count 0)
+                (progn
+                  (<=# read_tready_r 0)
+                  (<=# status #b00111)))
+              ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i) (i16 (l_* i 16)) (i16+15 (l_+ i16 15))) (incf i)
+                  `(<=# (ref ,(symcat 'cache_mem old-i) vcache_addr_w) (ref read_tdata ,i16+15 ,i16))))
+                                     (make-list cache-data-n)))
+              (<=# beat_count (- beat_count 1)))
+
+            (#b00111
+              (if (== read_finished 1)
+                (progn
+                  (<=# read_finished_ack_r 1)
+                  (<=# status #b01111))))
+
+            (#b01111
+              (if (== read_finished 0)
+                (progn
+                  (<=# read_finished_ack_r 0)
+                  (<=# status #b01110))))
+
+            (#b01110
+              (<=# status #b00000)
+              (<=# iter_addr_r 
+               (+ iter_addr_r ,vram-line-stride))
+              (<=# iter_vcache_line_r (cat (b 1 0) (ref iter_vcache_line_r ,(l_- vcache-height 1) 1)))
+              (<=# vcount (- vcount 1)))
+
+            (#b10000
+              (<=# req_write_into_ram_ready_r 0)
+              (if (ref iter_vcache_line_r 0)
+                (progn
+                  (<=# write_req_r 1)
+                  (<=# beat_count (b ,beat-n-bit-width ,(l_- beat-n 1)))
+                  (<=# status #b10001))
+
+                (<=# status #b10100)))
+
+            (#b10001
+              (if write_req_ack 
+                (progn
+                  (<=# write_req_r 0)
+                  (<=# write_tvalid_r 1)
+                  ;(<=# (ref write_tdata_r 15 0) (ref cache_mem0 vcache_addr_w))
+
+                  ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i) (i16 (l_* i 16)) (i16+15 (l_+ i16 15))) (incf i)
+                  `(<=# (ref write_tdata_r ,i16+15 ,i16) (ref ,(symcat 'cache_mem old-i) vcache_addr_w))))
+                                         (make-list cache-data-n)))
+                  (<=# status #b10010))))
+
+            (#b10010
+              (if write_tready
+                (progn
+                  ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i) (i16 (l_* i 16)) (i16+15 (l_+ i16 15))) (incf i)
+                  `(<=# (ref write_tdata_r ,i16+15 ,i16) (ref ,(symcat 'cache_mem old-i) vcache_addr_w))))
+                                         (make-list cache-data-n)))
+                  (<=# beat_count (- beat_count 1))
+                  (<=# status #b10011))))
+
+            (#b10011
+              (if (== beat_count 0)
+                (progn
+                  (<=# write_tvalid_r 0)
+                  (<=# status #b10111)))
+              (<=# beat_count (- beat_count 1)))
+
+            (#b10111
+              (if (== write_finished 1)
+                (progn
+                  (<=# write_finished_ack_r 1)
+                  (<=# status #b10110))))
+
+            (#b10110
+              (if (== write_finished 0)
+                (progn
+                  (<=# write_finished_ack_r 0)
+                  (<=# status #b10100))))
+
+            (#b10100
+              (<=# status #b00000)
+              (<=# iter_addr_r 
+               (+ iter_addr_r ,vram-line-stride))
+              (<=# iter_vcache_line_r (cat (b 1 0) (ref iter_vcache_line_r ,(l_- vcache-height 1) 1)))
+              (<=# vcount (- vcount 1)))
+              ))
+
+
+#|
+        (always ((posedge clk))
+          (if (& io_rd cache_mem_access)
+                (case (ref io_mem_addr 1 0)
+                 ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i)) (incf i)
+                    `(,i (<=# io_rd_data_r (ref ,(symcat 'cache_mem old-i) (& (ref io_mem_addr ,cache-data-width 2) ,(l_- cache-data-size 1)))))))
+                        (make-list cache-data-n))))))
+|#
+                        )))
+
+;(show-module-if 'make-vcache-module)
+;(show-module-reg 'make-vcache-module 'cache_mem)
 
 ;----------------------------------------------------------------
 (defparameter *DEFINE-WORD* "TEST_BENCH")
@@ -108,19 +313,166 @@
       (format t "`endif~%")))
   
 ;----------------------------------------------------------------
-
 (tb-main (eq *__name__* :__main__)
-  (use clocks)
   (setf *transport-delay* 1)
+  (use clocks)
+  (use if-utils)
+  (use signal-log)
+  (make-signal-log data1)
 
   (make-clock clock)
+  (make-vcache-module vcache)
+  (make-reg-wire-assign 'make-vcache-module)
 
-  (module tb()
+  (eval
+    `(module tb()
+      (wire clk)
+      (reg= rst 0)
+  
+      (clock :name clock0 clk)
+
+      (wire ,@(make-wire-list-from-module 'make-vcache-module :filter #'(lambda (x) (eq (car x) 'output))))
+
+      ,@(make-reg-wire-assign 'make-vcache-module)
+
+      (vcache :name vcache0 clk rst ,@(make-wire-list-from-module 'make-vcache-module :only-name t))
+
+      (reg= tb_is_finished 0)
+      (data1 :name read_tvalid_count clk read_tvalid_w tb_is_finished)
+      (data1 :name write_tready_count clk write_tready_w tb_is_finished)
+
     (initial
       (dumpfile "vcd/vcache.vcd")
       (dumpvars 0 tb)
 
+      (= io_rd_r 0)
+      (= io_wr_r 0)
+      (= req_read_from_ram_valid_r 0)
+      (= req_write_into_ram_valid_r 0)
+      (= read_req_ack_r 0)
+      (= write_req_ack_r 0)
+      (= read_tvalid_r 0)
+      (= read_finished_r 0)
+
+      (= write_tready_r 0)
+      (= write_finished_r 0)
+
+      (# 200 :pass)
+      (= rst 0)
+      (# 200) (= rst 1)
+      (# 200) (= rst 0)
+
       (# 200)
-      (finish))))
+      (= io_mem_addr_r #x1000)
+      (= io_wr_data_r  #x4321)
+      (= io_wr_r 1)
+      (# 10)
+      (= io_wr_r 0)
+
+      (# 10)
+      (= io_mem_addr_r #x1001)
+      (= io_wr_data_r  #x8765)
+      (= io_wr_r 1)
+      (# 10)
+      (= io_wr_r 0)
+
+      (# 10)
+      (= io_mem_addr_r #x1002)
+      (= io_wr_data_r  #xBA09)
+      (= io_wr_r 1)
+      (# 10)
+      (= io_wr_r 0)
+
+      (# 10)
+      (= io_mem_addr_r #x1003)
+      (= io_wr_data_r  #xFEDC)
+      (= io_wr_r 1)
+      (# 10)
+      (= io_wr_r 0)
+
+
+      (# 10)
+      (= io_rd_r 1)
+      (# 10)
+      (= io_rd_r 0)
+
+      (# 200 :pass)
+      (= req_read_start_addr_r #x000000)
+      (= req_read_update_vcache_line_r (b 32 2))
+      (= req_read_from_ram_valid_r 1)
+      (wait (== req_read_from_ram_ready_w 1))
+      (# 10)
+      (= req_read_from_ram_valid_r 0)
+      (wait (== read_req_w 1))
+      (# 10)
+      (= read_req_ack_r 1)
+      (wait (== read_req_w 0))
+      (= read_req_ack_r 0)
+      (# 400)
+      (= read_tvalid_r 1)
+      (= read_tdata_r (d 64 #x1234567890ABCDEF))
+      (v_repeat 31
+          (# 10)
+          (= read_tdata_r (+ read_tdata_r 1)))
+      (# 10)
+      (= read_tvalid_r 0)
+      (# 10)
+      (= read_finished_r 1)
+      (# 10)
+      (wait (== read_finished_ack_w 1))
+      (# 10)
+      (= read_finished_r 0)
+      (# 10)
+      (wait (== read_finished_ack_w 0))
+      (wait (== busy_w 0))
+      (# 10)
+
+      (= io_mem_addr_r #x1000)
+      (= io_wr_data_r  #x4321)
+      (= io_wr_r 1)
+      (# 10)
+      (= io_wr_r 0)
+      (# 100)
+
+      (wait (== processing_w 0))
+      (# 200)
+
+      ;(= req_write_flush_vcache_line_r (b 32 #b01000))
+      (= req_write_flush_vcache_line_r (b 32 #b0001))
+      (= req_write_into_ram_valid_r 1)
+      (wait (== req_write_into_ram_ready_w 1))
+      (# 10)
+      (= req_write_into_ram_valid_r 0)
+      (# 150)
+      
+      (wait (== write_req_w 1))
+      (# 10)
+      (= write_req_ack_r 1)
+      (wait (== write_req_w 0))
+      (= write_req_ack_r 0)
+      (# 400)
+      (= write_tready_r 1)
+      (wait (== write_tvalid_w 1))
+      (# 10)
+      (v_repeat 31
+          (# 10 :pass))
+      (= write_tready_r 0)
+      (# 10)
+      (= write_finished_r 1)
+      (# 10)
+      (wait (== write_finished_ack_w 1))
+      (# 10)
+      (= write_finished_r 0)
+      (# 10)
+      (wait (== write_finished_ack_w 0))
+      (wait (== busy_w 0))
+      (# 10)
+
+      (wait (== processing_w 0))
+      (# 200)
+
+      (# 20)
+      (= tb_is_finished 1)
+      (finish)))))
 
 (make-epilogue)
