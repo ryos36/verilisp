@@ -4,10 +4,8 @@
 (defmacro my-my-inc (sym)
     `(v_<=# ,sym (v_+ ,sym 1)))
 
-(defmacro make-signal-log (name &optional (_width 1) file-name)
-    ;(let ((file-name (v_if (null file-name) (concatenate 'string (symbol-name name) *signal-log-suffix*) file-name)))
-        `(v_module ,name ((input clk) (input (,_width ,name)) (input finished))
-
+(defmacro make-signal-log (name &optional (_width 1))
+    `(v_module ,name ((input clk) (input (,_width ,name)) (input finished))
             (v_initial
               (v_display "[ (:" ,(symbol-name name) " ." ,_width " )"))
             (v_reg (,_width probe_signal_r))
@@ -35,9 +33,7 @@
                     (default
                         ; nothing to do
                         (v_<=# finished_r finished_r)
-                        ))))
-                ;)
-                )
+                        )))))
 
 
 (when (eq *__name__* :__main__)
