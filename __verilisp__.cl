@@ -1780,7 +1780,12 @@
                     (write-string
                         (strcat
                             (string ',op)
-                            (string (car args))
+                            (if (atom (car args))
+                              (string (car args))
+                              (let* ((out (make-string-output-stream))
+                                     (*standard-output* out))
+                                (write-or-eval (car args))
+                                (get-output-stream-string out)))
                         )
                     )
                 )
@@ -1981,7 +1986,13 @@
             (++indent)
             (foreach case-part cases
                 (nli)
-                (write-or-eval (car case-part))
+                (let ((car-case-part (car case-part)) (del ""))
+                    (if (and (listp car-case-part) (not (functionp (car car-case-part))))
+                        (foreach a car-case-part
+                            (write-string del)
+                            (write-or-eval a)
+                            (setf del ", "))
+                        (write-or-eval car-case-part)))
                 (write-string ":")
                 (let* ((remain (cdr case-part))
                        (flag-n (> (length remain) 1)))
