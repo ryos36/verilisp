@@ -38,24 +38,25 @@
      (reg= do_write_req 0)
 
      (always ((posedge clk))
+       (if (== write_req_r 1)
+        (if (== write_req_ready_w 1)
+           (<=# write_req_r 0))
        (if (> write_count (d 5 0))
          (progn
-           (<=# write_tvalid_r 1)
-           (if (== write_req_ack_w 1)
+           (<=# write_data_enable_r 1)
+           (if (== write_req_ready_w 1)
                (<=# write_req_r 0))
-           (if (== write_tready_w 1)
-              (progn
-                (<=# write_tdata_r (+ write_tdata_r 1))
-                (<=# write_count (- write_count 1)))))
+           (<=# write_data_r (+ write_data_r 1))
+           (<=# write_count (- write_count 1)))
          (progn
-           (<=# write_tvalid_r 0)
+           (<=# write_data_enable_r 0)
            (if (== do_write_req 1)
              (progn
                (<=# write_req_r 1)
-               (<=# write_tdata_r #x1234567890ABCDEF)
+               (<=# write_data_r #x1234567890ABCDEF)
                (<=# write_count (d 5 31)))
-             (<=# write_tdata_r (cat* 64 (cat (b 1 x))))))))
-     
+             (<=# write_data_r (cat* 64 (cat (b 1 x)))))))))
+
      (initial
          (dumpfile "vcd/sys-tb.vcd")
          (dumpvars 0 tb)
@@ -63,12 +64,10 @@
          (= read_addr_r (h ,*ADDR_WIDTH* 00_0000))
          (= read_bytes_r ,(l_* 640 4))
          (= read_req_valid_r 0)
-         ;(= read_finished_ack_r 0)
          (= read_is_first_line_r 1)
          (= read_tready_r 1)
 
          (= write_req_r 0)
-         (= write_finished_ack_r 0)
      
          (# 200 :pass)
          (= rst 0)
@@ -80,49 +79,29 @@
          (wait (== read_req_ready_w 1))
          (# 10)
          (= read_req_valid_r 0)
+         (wait (== read_tvalid_w 1))
          (# 10)
-         (wait (== read_req_ready_w 0))
+         (wait (== read_tvalid_w 0))
      
          (= write_addr_r #x011100)
          (# 200)
          (= do_write_req 1)
-         (# 10)
-         (wait (== write_req_ack_w 1))
+         (# 200)
          (= do_write_req 0)
-         (wait (== write_req_ack_w 0))
+         (= read_is_first_line_r 0)
          (# 10)
-         (wait (== write_finished_w 1))
-         (# 100)
-         (= write_finished_ack_r 1)
-         (# 10)
-         (wait (== write_finished_w 0))
-         (# 10)
-         (= write_finished_ack_r 0)
-     
-         #|
-         (# 200)
-         (= read_req_r 1)
-         (wait (== read_req_ack_w 1))
-         (# 10)
-         (= read_req_r 0)
-         (# 10)
-         (wait (== read_req_ack_w 0))
-         (# 10)
-         (wait (== read_finished_w 1))
-     
-         (# 100)
-         (= read_finished_ack_r 1)
-     
-         (# 10)
-         (wait (== read_finished_w 0))
-
-         (# 10)
-         (= read_finished_ack_r 0)
-         |#
+         (wait (== write_req_ready_w 1))
      
          (# 200)
-
-         (finish)
-         )))
+         (= read_req_valid_r 1)
+         (wait (== read_req_ready_w 1))
+         (# 10)
+         (= read_req_valid_r 0)
+         (wait (== read_tvalid_w 1))
+         (# 10)
+         (wait (== read_tvalid_w 0))
+         (wait (== read_tlast_w 1))
+         (# 200)
+         (finish))))
 
 (make-epilogue)

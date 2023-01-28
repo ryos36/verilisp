@@ -107,9 +107,6 @@
         (reg= read_tready_r 0)
         (assign read_tready read_tready_r)
 
-        ;(reg= read_finished_ack_r 0)
-        ;(assign read_finished_ack read_finished_ack_r)
-
         ;----------------------------------------------------------------
         (reg= req_write_into_ram_ready_r 0)
         (assign req_write_into_ram_ready req_write_into_ram_ready_r)
@@ -117,26 +114,22 @@
         (reg= write_req_r 0)
         (assign write_req write_req_r)
         (assign write_addr iter_addr_r)
-        (assign write_bytes ,vcache-line-bytes)
 
         (wire (,cache-data-width-by-ram vcache_addr_w))
         (assign vcache_addr_w (~ (cat vcount beat_count)))
 
-        (reg= write_tvalid_r 0)
-        (assign write_tvalid write_tvalid_r)
-        (assign write_tdata write_tvalid_r)
+        (reg= write_data_enable_r 0)
+        (assign write_data_enable write_data_enable_r)
 
-        (reg (,ram-data-width write_tdata_r))
-
-        (reg= write_finished_ack_r 0)
-        (assign write_finished_ack write_finished_ack_r)
+        (reg (,ram-data-width write_data_r))
+        (assign write_data write_data_r)
 
         (reg now_writing_r)
         ;----------------------------------------------------------------
         (reg= (5 status) 0)
 
         (assign cache_mem16_0 (ref cache_mem0 0))
-        (assign busy (& (!= status #b00000) (!= status #b01110) (!= status #b10100)))
+        (assign busy (& (!= status #b00000) (!= status #b01110) (!= status #b10011)))
         (assign processing (| vcount))
 
         (always ((posedge clk))
@@ -234,55 +227,35 @@
                   (<=# beat_count (b ,beat-n-bit-width ,(l_- beat-n 1)))
                   (<=# status #b10001))
 
-                (<=# status #b10100)))
+                (<=# status #b10011)))
 
             (#b10001
-              (if write_req_ack 
+              (if write_req_ready 
                 (progn
                   (<=# write_req_r 0)
-                  (<=# write_tvalid_r 1)
-                  ;(<=# (ref write_tdata_r 15 0) (ref cache_mem0 vcache_addr_w))
-
+                  (<=# write_data_enable_r 1)
                   ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i) (i16 (l_* i 16)) (i16+15 (l_+ i16 15))) (incf i)
-                  `(<=# (ref write_tdata_r ,i16+15 ,i16) (ref ,(symcat 'cache_mem old-i) vcache_addr_w))))
+                  `(<=# (ref write_data_r ,i16+15 ,i16) (ref ,(symcat 'cache_mem old-i) vcache_addr_w))))
                                          (make-list cache-data-n)))
                   (<=# status #b10010))))
 
             (#b10010
-              (if write_tready
-                (progn
-                  ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i) (i16 (l_* i 16)) (i16+15 (l_+ i16 15))) (incf i)
-                  `(<=# (ref write_tdata_r ,i16+15 ,i16) (ref ,(symcat 'cache_mem old-i) vcache_addr_w))))
-                                         (make-list cache-data-n)))
-                  (<=# beat_count (- beat_count 1))
-                  (<=# status #b10011))))
-
-            (#b10011
               (if (== beat_count 0)
                 (progn
-                  (<=# write_tvalid_r 0)
-                  (<=# status #b10111)))
+                  (<=# write_data_enable_r 0)
+                  (<=# status #b10011)))
+
+              ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i) (i16 (l_* i 16)) (i16+15 (l_+ i16 15))) (incf i)
+                  `(<=# (ref write_data_r ,i16+15 ,i16) (ref ,(symcat 'cache_mem old-i) vcache_addr_w))))
+                                         (make-list cache-data-n)))
               (<=# beat_count (- beat_count 1)))
 
-            (#b10111
-              (if (== write_finished 1)
-                (progn
-                  (<=# write_finished_ack_r 1)
-                  (<=# status #b10110))))
-
-            (#b10110
-              (if (== write_finished 0)
-                (progn
-                  (<=# write_finished_ack_r 0)
-                  (<=# status #b10100))))
-
-            (#b10100
+            (#b10011
               (<=# status #b00000)
               (<=# iter_addr_r 
                (+ iter_addr_r ,vram-line-stride))
               (<=# iter_vcache_line_r (cat (b 1 0) (ref iter_vcache_line_r ,(l_- vcache-height 1) 1)))
-              (<=# vcount (- vcount 1)))
-              ))
+              (<=# vcount (- vcount 1)))))
 
 
 #|
@@ -333,7 +306,7 @@
 
       (reg= tb_is_finished 0)
       (data1 :name read_tvalid_count clk read_tvalid_w tb_is_finished)
-      (data1 :name write_tready_count clk write_tready_w tb_is_finished)
+      (data1 :name write_data_enable clk write_data_enable_w tb_is_finished)
 
     (initial
       (dumpfile "vcd/vcache.vcd")
@@ -344,11 +317,8 @@
       (= req_read_from_ram_valid_r 0)
       (= req_write_into_ram_valid_r 0)
       (= read_req_ready_r 0)
-      (= write_req_ack_r 0)
+      (= write_req_ready_r 0)
       (= read_tvalid_r 0)
-
-      (= write_tready_r 0)
-      (= write_finished_r 0)
 
       (# 200 :pass)
       (= rst 0)
@@ -434,29 +404,14 @@
       
       (wait (== write_req_w 1))
       (# 10)
-      (= write_req_ack_r 1)
-      (wait (== write_req_w 0))
-      (= write_req_ack_r 0)
-      (# 400)
-      (= write_tready_r 1)
-      (wait (== write_tvalid_w 1))
+      (= write_req_ready_r 1)
       (# 10)
-      (v_repeat 31
-          (# 10 :pass))
-      (= write_tready_r 0)
+      (= write_req_ready_r 0)
       (# 10)
-      (= write_finished_r 1)
-      (# 10)
-      (wait (== write_finished_ack_w 1))
-      (# 10)
-      (= write_finished_r 0)
-      (# 10)
-      (wait (== write_finished_ack_w 0))
       (wait (== busy_w 0))
       (# 10)
 
       (wait (== processing_w 0))
-      (# 200)
 
       (# 20)
       (= tb_is_finished 1)
