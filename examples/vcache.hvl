@@ -55,12 +55,12 @@
               (output (,j1a-data-width io_rd_data))))
 
          ; Cache I/F
-         (input req_read_from_ram_valid)
+         (input req_read_from_ram_req)
          (input (,ram-addr-width req_read_start_addr))
          (input (,vcache-height req_read_update_vcache_line))
          (output req_read_from_ram_ready)
 
-         (input req_write_into_ram_valid)
+         (input req_write_into_ram_req)
          (input (,vcache-height req_write_flush_vcache_line))
          (output req_write_into_ram_ready)
 
@@ -99,8 +99,8 @@
         (reg= req_read_from_ram_ready_r 0)
         (assign req_read_from_ram_ready req_read_from_ram_ready_r)
 
-        (reg= read_req_valid_r 0)
-        (assign read_req_valid read_req_valid_r)
+        (reg= read_req_r 0)
+        (assign read_req read_req_r)
         (assign read_addr iter_addr_r)
         (assign read_bytes ,vcache-line-bytes)
 
@@ -154,7 +154,7 @@
                     (<=# status #b00001)))
                   
 
-                (req_read_from_ram_valid
+                (req_read_from_ram_req
                   (<=# now_writing_r 0)
                   (<=# req_read_from_ram_ready_r 1)
                   (<=# read_start_addr_r req_read_start_addr)
@@ -163,7 +163,7 @@
                   (<=# vcount ,(l_- vcache-height 1))
                   (<=# status #b00001))
 
-                (req_write_into_ram_valid
+                (req_write_into_ram_req
                   (<=# now_writing_r 1)
                   (<=# req_write_into_ram_ready_r 1)
                   (<=# iter_addr_r read_start_addr_r)
@@ -175,7 +175,7 @@
               (<=# req_read_from_ram_ready_r 0)
               (if (ref iter_vcache_line_r 0)
                 (progn
-                  (<=# read_req_valid_r 1)
+                  (<=# read_req_r 1)
                   (<=# status #b00011))
                 (<=# status #b01110)))
 
@@ -184,7 +184,7 @@
                 (progn
                   (<=# read_tready_r 1)
                   (<=# beat_count (b ,beat-n-bit-width ,(l_- beat-n 1)))
-                  (<=# read_req_valid_r 0)
+                  (<=# read_req_r 0)
                   (<=# status #b00010))))
 
             (#b00010
@@ -314,8 +314,8 @@
 
       (= io_rd_r 0)
       (= io_wr_r 0)
-      (= req_read_from_ram_valid_r 0)
-      (= req_write_into_ram_valid_r 0)
+      (= req_read_from_ram_req_r 0)
+      (= req_write_into_ram_req_r 0)
       (= read_req_ready_r 0)
       (= write_req_ready_r 0)
       (= read_tvalid_r 0)
@@ -362,14 +362,14 @@
       (# 200 :pass)
       (= req_read_start_addr_r #x000000)
       (= req_read_update_vcache_line_r (b 32 2))
-      (= req_read_from_ram_valid_r 1)
+      (= req_read_from_ram_req_r 1)
       (wait (== req_read_from_ram_ready_w 1))
       (# 10)
-      (= req_read_from_ram_valid_r 0)
+      (= req_read_from_ram_req_r 0)
       (# 100)
       (= read_req_ready_r 1)
       (# 10)
-      (wait (== read_req_valid_w 1))
+      (wait (== read_req_w 1))
       (= read_req_ready_r 0)
       (# 400)
       (= read_tvalid_r 1)
@@ -396,10 +396,10 @@
 
       ;(= req_write_flush_vcache_line_r (b 32 #b01000))
       (= req_write_flush_vcache_line_r (b 32 #b0001))
-      (= req_write_into_ram_valid_r 1)
+      (= req_write_into_ram_req_r 1)
       (wait (== req_write_into_ram_ready_w 1))
       (# 10)
-      (= req_write_into_ram_valid_r 0)
+      (= req_write_into_ram_req_r 0)
       (# 150)
       
       (wait (== write_req_w 1))

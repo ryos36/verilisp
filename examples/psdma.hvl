@@ -13,7 +13,7 @@
     (copy-tree
         `((input (,addr-width ,(symcat name 'addr)))
           (input (,*MAX_READ_WIDTH* ,(symcat name 'bytes)))
-          (input ,(symcat name 'req_valid))
+          (input ,(symcat name 'req))
           (output ,(symcat name 'req_ready)))))
 
 (defun make-psdma-video-read-if (name data-width addr-width)
@@ -111,7 +111,7 @@
                 (#b00000
                   (if init_calib_i
                     (cond
-                      (read_req_valid
+                      (read_req
                         (<=# read_req_ready_r 1)
                         (<=# psram_addr_r read_addr)
                         (<=# psram_bytes_r read_bytes)
@@ -258,7 +258,7 @@
         (= init_calib_r 1)
         (= read_addr_r (h ,*ADDR_WIDTH* 00_0000))
         (= read_bytes_r ,(l_* 640 4))
-        (= read_req_valid_r 0)
+        (= read_req_r 0)
         (= rd_data_valid_r 0)
         (= read_tready_r 1)
         (= read_is_first_line_r 1)
@@ -269,17 +269,17 @@
         (# 200) (= rst 0)
 
         (# 200)
-        (= read_req_valid_r 1)
+        (= read_req_r 1)
         (wait (== read_req_ready_w 1))
         (# 10)
-        (= read_req_valid_r 0)
+        (= read_req_r 0)
         (= read_is_first_line_r 0)
 
         ;----------------------------------------------------------------
         (v_repeat 10
           (wait (== cmd_en_w 1))
           (# 10)
-          (= read_req_valid_r 1)
+          (= read_req_r 1)
 
           (# 10)
           (v_repeat 19
@@ -296,7 +296,7 @@
         ;----------------------------------------------------------------
         (wait (== read_req_ready_w 1))
         (# 10)
-        (= read_req_valid_r 0)
+        (= read_req_r 0)
 
         (# 200)
         (= tb_is_finished 1)

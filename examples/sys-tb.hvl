@@ -63,7 +63,7 @@
      
          (= read_addr_r (h ,*ADDR_WIDTH* 00_0000))
          (= read_bytes_r ,(l_* 640 4))
-         (= read_req_valid_r 0)
+         (= read_req_r 0)
          (= read_is_first_line_r 1)
          (= read_tready_r 1)
 
@@ -75,10 +75,10 @@
          (# 200) (= rst 0)
      
          (# 200)
-         (= read_req_valid_r 1)
+         (= read_req_r 1)
          (wait (== read_req_ready_w 1))
          (# 10)
-         (= read_req_valid_r 0)
+         (= read_req_r 0)
          (wait (== read_tvalid_w 1))
          (# 10)
          (wait (== read_tvalid_w 0))
@@ -93,10 +93,10 @@
          (wait (== write_req_ready_w 1))
      
          (# 200)
-         (= read_req_valid_r 1)
+         (= read_req_r 1)
          (wait (== read_req_ready_w 1))
          (# 10)
-         (= read_req_valid_r 0)
+         (= read_req_r 0)
          (wait (== read_tvalid_w 1))
          (# 10)
          (wait (== read_tvalid_w 0))
