@@ -17,11 +17,11 @@
           (output ,(symcat name 'finished))
           (input ,(symcat name 'finished_ack)))))
 
-(defun make-psdma-read-if (name data-width addr-width &optional use-for-video)
+(defun make-psdma-video-read-if (name data-width addr-width)
     (copy-tree
         `(,@(make-psdma-req-if name :addr-width addr-width)
 
-          ,@(l_if use-for-video `((input ,(symcat name 'is_first_line))))
+          (input ,(symcat name 'is_first_line))
 
           ,@(make-axis-main-if name data-width))))
 
@@ -31,8 +31,8 @@
 
           ,@(make-axis-sub-if name data-width))))
 ;----------------------------------------------------------------
-(defun make-psdma-read-access-if (name &key (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*) (use-for-video nil))
-    (make-reverse-if (make-psdma-read-if name data-width addr-width use-for-video)))
+(defun make-psdma-video-read-access-if (name &key (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
+    (make-reverse-if (make-psdma-video-read-if name data-width addr-width)))
 
 (defun make-psdma-write-access-if (name &key (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
     (make-reverse-if (make-psdma-write-if name data-width addr-width)))
@@ -59,7 +59,7 @@
          (output cmd_o)
          (output cmd_en_o)
 
-        ,@(make-psdma-read-if 'read_ data-width addr-width :use-for-video)
+        ,@(make-psdma-video-read-if 'read_ data-width addr-width)
         ,@(make-psdma-write-if 'write_ data-width addr-width)
 
         (output (5 debug_error_o))

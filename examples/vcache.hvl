@@ -70,7 +70,7 @@
          (output busy)
 
          ; psdma read I/F
-         ,@(make-psdma-read-access-if 'read_)
+         ,@(make-psdma-video-read-access-if 'read_)
 
          ; psdma write I/F
          ,@(make-psdma-write-access-if 'write_)
