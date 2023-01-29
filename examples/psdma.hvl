@@ -5,31 +5,21 @@
 (defparameter *MAX_READ_WIDTH* 13) ; 8192
 (defparameter *WRITE-WAIT* 20)
 
-(use axis)
 (use if-utils)
-
-;----------------------------------------------------------------
-(defun make-psdma-video-req-if (name &key (addr-width *ADDR_WIDTH*))
-    (copy-tree
-        `((input (,addr-width ,(symcat name 'addr)))
-          (input (,*MAX_READ_WIDTH* ,(symcat name 'bytes)))
-          (input ,(symcat name 'req))
-          (output ,(symcat name 'req_ready)))))
-
-(defun make-psdma-video-read-if (name data-width addr-width)
-    (copy-tree
-        `(,@(make-psdma-video-req-if name :addr-width addr-width)
-
-          (input ,(symcat name 'is_first_line))
-
-          ,@(make-axis-main-if name data-width))))
 
 ;----------------------------------------------------------------
 (defun make-psdma-req-if (name &key (addr-width *ADDR_WIDTH*))
     (copy-tree
         `((input (,addr-width ,(symcat name 'addr)))
-          (input ,(symcat name 'req))
+          (input ,(symcat name 'req_valid))
           (output ,(symcat name 'req_ready)))))
+
+(defun make-psdma-read-if (name data-width addr-width)
+    (copy-tree
+        `(,@(make-psdma-req-if name :addr-width addr-width)
+
+         (output ,(symcat name 'data_enable))
+         (output (,data-width ,(symcat name 'data))))))
 
 (defun make-psdma-write-if (name data-width addr-width)
     (copy-tree
@@ -38,8 +28,8 @@
          (input ,(symcat name 'data_enable))
          (input (,data-width ,(symcat name 'data))))))
 ;----------------------------------------------------------------
-(defun make-psdma-video-read-access-if (name &key (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
-    (make-reverse-if (make-psdma-video-read-if name data-width addr-width)))
+(defun make-psdma-read-access-if (name &key (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
+    (make-reverse-if (make-psdma-read-if name data-width addr-width)))
 
 (defun make-psdma-write-access-if (name &key (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
     (make-reverse-if (make-psdma-write-if name data-width addr-width)))
@@ -66,28 +56,28 @@
          (output cmd_o)
          (output cmd_en_o)
 
-        ,@(make-psdma-video-read-if 'read_ data-width addr-width)
+        ,@(make-psdma-read-if 'read_ data-width addr-width)
         ,@(make-psdma-write-if 'write_ data-width addr-width)
 
         (output (5 debug_error_o))
         (output (2 error_o)))
 
-        ,@(make-axis-main-reg 'read_ data-width)
-
         (reg= read_req_ready_r 0)
         (assign read_req_ready read_req_ready_r)
+
+        (reg= read_data_enable_r 0)
+        (reg (,data-width read_data_r))
+        (assign read_data_enable read_data_enable_r)
+        (assign read_data read_data_r)
 
         (reg= write_req_ready_r 0)
         (assign write_req_ready write_req_ready_r)
 
         (reg psram_cmd_r)
         (reg= psram_cmd_en_r 0)
-
         (reg (,addr-width psram_addr_r))
-        (reg (,*MAX_READ_WIDTH* psram_bytes_r))
-        (reg psram_is_first_line)
 
-        (reg data_mask_r)
+        (reg (,data-mask-width data_mask_r)) ; ToDo
 
         (assign cmd_o psram_cmd_r)
         (assign cmd_en_o psram_cmd_en_r)
@@ -96,7 +86,7 @@
         (assign wr_data_o write_data)
 
         (reg= (5 psman_status) 0)
-        (reg (,beat-n-bit-width read_counter)) ; todo
+        (reg (,beat-n-bit-width beat_counter)) ; todo
 
         (reg (,data-width rd_data_r))
 
@@ -111,15 +101,14 @@
                 (#b00000
                   (if init_calib_i
                     (cond
-                      (read_req
+                      (read_req_valid
                         (<=# read_req_ready_r 1)
                         (<=# psram_addr_r read_addr)
-                        (<=# psram_bytes_r read_bytes)
-                        (<=# psram_is_first_line read_is_first_line)
                         (<=# psram_cmd_r 0)
+                        (<=# psram_cmd_en_r 1)
                         (<=# psman_status #b00001))
 
-                      (write_req
+                      (write_req_valid
                         (<=# write_req_ready_r 1)
                         (<=# psram_addr_r write_addr)
                         (<=# psram_cmd_r 1)
@@ -128,54 +117,37 @@
 
                 ;--------------------------------
                 ; Start Read REQ
+                ; Wait Read Data
                 (#b00001
                   (<=# read_req_ready_r 0)
-                  (<=# psram_cmd_en_r 1)
-                  (<=# read_counter ,(l_- beat-n 1))
-                  (<=# psman_status #b00011))
-
-                ; Wait Read Data
-                (#b00011
                   (<=# psram_cmd_en_r 0)
+                  (<=# beat_counter ,(l_- beat-n 1))
                   (if (== rd_data_valid_i #b1)
                     (progn
-                      (<=# read_tvalid_r 1)
-                      (<=# read_tdata_r rd_data_i)
-                      (<=# psram_is_first_line #b0)
-                      (<=# read_counter (- read_counter 1))
-                      (<=# psman_status #b00010)))
-
-                  (<=# read_tuser_r psram_is_first_line)
-                  (<=# read_tlast_r 0))
+                      (<=# read_data_enable_r 1)
+                      (<=# read_data_r rd_data_i)
+                      (<=# beat_counter (- beat_counter 1))
+                      (<=# psman_status #b00011))))
 
                 ; Read Data as Burst
-                (#b00010
-                  (<=# read_tdata_r rd_data_i)
-                  (<=# read_tvalid_r 1)
-                  (<=# read_tuser_r 0)
+                (#b00011
+                  (<=# read_data_enable_r 1)
+                  (<=# read_data_r rd_data_i)
 
-                  (if (| (== rd_data_valid_i #b0) (== read_tready 0))
+                  (if (== rd_data_valid_i 0)
                      (progn
                        (<=# rd_error_r 1)
                        (<=# debug_error_n (+ debug_error_n 1))))
 
-                  (if (== read_counter 0)
-                    (progn
-                      (<=# read_tlast_r (<= psram_bytes_r ,one-read-bytes))
-                      (<=# psman_status #b00110))
-                    (<=# read_counter (- read_counter 1))))
+                  (if (== beat_counter 0)
+                    (<=# psman_status #b00010)
+                    (<=# beat_counter (- beat_counter 1))))
 
                 ; Read Done 
-                (#b00110
-                  (<=# read_tdata_r (cat* ,data-width (cat (b 1 x))))
-                  (<=# read_tvalid_r 0)
-                  (<=# read_tlast_r 0)
-                  (if (> psram_bytes_r ,one-read-bytes)
-                    (progn
-                      (<=# psram_bytes_r (- psram_bytes_r ,one-read-bytes))
-                      (<=# psram_addr_r (+ psram_addr_r ,one-read-bytes))
-                      (<=# psman_status #b00001))
-                    (<=# psman_status #b00000)))
+                (#b00010
+                  (<=# read_data_r (cat* ,data-width (cat (b 1 x))))
+                  (<=# read_data_enable_r 0)
+                  (<=# psman_status #b00000))
 
                 ;--------------------------------
                 ; Start Write REQ
@@ -184,7 +156,7 @@
                   (<=# psram_cmd_en_r 0)
                   (<=# data_mask_r (cat* ,data-mask-width (cat (b 1 0))))
                              ; 1 means avoiding to write
-                  (<=# read_counter ,(l_- beat-n 1))
+                  (<=# beat_counter ,(l_- beat-n 1))
                   (<=# psman_status #b10001))
 
                 ; Write Data as Burst
@@ -194,30 +166,27 @@
                       (<=# wr_error_r 1)
                       (<=# debug_error_n (+ debug_error_n 1))))
 
-                  (if (== read_counter 0)
+                  (if (== beat_counter 0)
                     (<=# psman_status #b10011))
-                    (<=# read_counter (- read_counter 1)))
+                    (<=# beat_counter (- beat_counter 1)))
 
                 ; Write Done 
                 (#b10011
-                  (<=# read_counter ,*WRITE-WAIT*)
+                  (<=# beat_counter ,*WRITE-WAIT*)
                   (<=# psman_status #b10010))
 
                 ; Wait write complete
                 (#b10010
-                  (if (== read_counter 0)
+                  (if (== beat_counter 0)
                     (<=# psman_status #b00000))
-                  (<=# read_counter (- read_counter 1)))
+                  (<=# beat_counter (- beat_counter 1)))
 
                 ;--------------------------------
                 (default
                     ; nothing to do
-                    (<=# psman_status psman_status))))
-
-        )))
+                    (<=# psman_status psman_status)))))))
 
 ;----------------------------------------------------------------
-
 (when (eq *__name__* :__main__)
   (use clocks)
   (setf *transport-delay* 1)
@@ -247,8 +216,9 @@
       (psdma :name psdma0 clk rst ,@(make-wire-list-from-module 'make-psdma-module :only-name t))
 
       (reg= tb_is_finished 0)
-      ;(data1 :name rd_data_valid_count clk rd_data_valid_w tb_is_finished)
-      (data1 :name read_tvalid_count clk read_tvalid_w tb_is_finished)
+
+      (data1 :name rd_data_valid_count clk rd_data_valid_w tb_is_finished)
+      (data1 :name read_data_enable_count clk read_data_enable_w tb_is_finished)
   
       (initial
         (dumpfile "vcd/psdma.vcd")
@@ -257,11 +227,8 @@
 
         (= init_calib_r 1)
         (= read_addr_r (h ,*ADDR_WIDTH* 00_0000))
-        (= read_bytes_r ,(l_* 640 4))
-        (= read_req_r 0)
+        (= read_req_valid_r 0)
         (= rd_data_valid_r 0)
-        (= read_tready_r 1)
-        (= read_is_first_line_r 1)
 
         (# 200 :pass)
         (= rst 0)
@@ -269,17 +236,16 @@
         (# 200) (= rst 0)
 
         (# 200)
-        (= read_req_r 1)
+        (= read_req_valid_r 1)
         (wait (== read_req_ready_w 1))
         (# 10)
-        (= read_req_r 0)
-        (= read_is_first_line_r 0)
+        (= read_req_valid_r 0)
 
         ;----------------------------------------------------------------
         (v_repeat 10
           (wait (== cmd_en_w 1))
           (# 10)
-          (= read_req_r 1)
+          (= read_req_valid_r 1)
 
           (# 10)
           (v_repeat 19
@@ -295,10 +261,10 @@
 
         ;----------------------------------------------------------------
         (wait (== read_req_ready_w 1))
+        (= read_req_valid_r 0)
         (# 10)
-        (= read_req_r 0)
 
-        (# 200)
+        (# 300)
         (= tb_is_finished 1)
         (finish)))))
 
