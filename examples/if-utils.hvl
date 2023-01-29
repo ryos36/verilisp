@@ -32,7 +32,7 @@
     sym))
 
 ;----------------------------------------------------------------
-(defun make-reverse-if (lst &optional over-write)
+(defun make-flipped-if (lst &optional over-write)
   (mapcar #'(lambda (x) 
     (let* ((if-name (car x))
            (vname-or-lst (cadr x))
@@ -114,6 +114,14 @@
                                           :ignore-sym-lst ignore-sym-lst)))))
 
 ;----------------------------------------------------------------
+(defparameter *DEFINE-WORD* "TEST_BENCH")
+(defmacro tb-main (expr &rest body)
+  `(when ,expr
+      (format t "`ifdef ~a~%" *DEFINE-WORD*)
+      ,@body 
+      (format t "`endif~%")))
+
+;----------------------------------------------------------------
 (when (eq *__name__* :__main__)
 
   (use clocks)
@@ -132,7 +140,7 @@
        ((input clk)
         (input rst)
 
-        ,@(make-reverse-if (make-if-list-from-module 'make-test1-module)))))
+        ,@(make-flipped-if (make-if-list-from-module 'make-test1-module)))))
 
   (make-test1-module test1)
   (make-test2-module test2)

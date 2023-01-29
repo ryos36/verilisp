@@ -29,10 +29,10 @@
          (input (,data-width ,(symcat name 'data))))))
 ;----------------------------------------------------------------
 (defun make-psdma-read-access-if (name &key (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
-    (make-reverse-if (make-psdma-read-if name data-width addr-width)))
+    (make-flipped-if (make-psdma-read-if name data-width addr-width)))
 
 (defun make-psdma-write-access-if (name &key (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
-    (make-reverse-if (make-psdma-write-if name data-width addr-width)))
+    (make-flipped-if (make-psdma-write-if name data-width addr-width)))
 
 ;----------------------------------------------------------------
 

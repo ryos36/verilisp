@@ -19,7 +19,7 @@
           (output cmd_en_o)))))
 
 (defmacro make-sim-psram-module (module-name &key (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*) (read-latency 16) (beat-n 32) (read-post-wait-n 16))
-   (let ((psram-if (make-reverse-if (make-psram-access-if data-width addr-width))))
+   (let ((psram-if (make-flipped-if (make-psram-access-if data-width addr-width))))
     (assert (l_>= read-latency 3) nil "read-latency must be >= 3, but now '~a'" read-latency)
     `(module ,module-name 
        ((input clk)

@@ -261,14 +261,6 @@
 ;(show-module-reg 'make-vcache-module 'cache_mem)
 
 ;----------------------------------------------------------------
-(defparameter *DEFINE-WORD* "TEST_BENCH")
-(defmacro tb-main (expr &rest body)
-  `(when ,expr
-      (format t "`ifdef ~a~%" *DEFINE-WORD*)
-      ,@body 
-      (format t "`endif~%")))
-  
-;----------------------------------------------------------------
 (tb-main (eq *__name__* :__main__)
   (setf *transport-delay* 1)
   (use clocks)
