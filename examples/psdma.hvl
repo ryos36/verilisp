@@ -59,6 +59,8 @@
         ,@(make-psdma-read-if 'read_ data-width addr-width)
         ,@(make-psdma-write-if 'write_ data-width addr-width)
 
+        (output busy)
+
         (output (5 debug_error_o))
         (output (2 error_o)))
 
@@ -95,6 +97,8 @@
         (reg= wr_error_r 0)
         (assign debug_error_o debug_error_n)
         (assign error_o (cat wr_error_r rd_error_r))
+
+        (assign busy (| psman_status))
 
         (always ((posedge clk))
             (case psman_status

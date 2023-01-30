@@ -1,6 +1,20 @@
 (make-prologue)
 
 ;----------------------------------------------------------------
+(defun flatten0 (lst)
+  (let (rv)
+    (dolist (each-if lst)
+      (dolist (aif each-if)
+        (push aif rv)))
+    rv))
+
+;----------------------------------------------------------------
+(defmacro make-serial-no-if (if-name name range-n &rest body)
+  (let ((i (gensym)))
+    `(l_if (l_> ,range-n 0) (flatten0 (foreach ,i (range (l_- ,range-n 1) -1 -1) (,if-name 
+    (symcat ,name ,i '_) ,@body))))))
+
+;----------------------------------------------------------------
 ;(reg a)
 ;(reg (8 aa))
 ;(reg (8 (4 ax)))
@@ -75,7 +89,11 @@
 
 ;----------------------------------------------------------------
 (defun make-if-list-from-module (module-macro &key (ignore-sym-lst '(rst clk)))
-  (let ((args (caddr (macroexpand-1 `(,module-macro anon)))))
+  (let* ((flag (listp module-macro))
+         (module-args (l_if flag (cddr module-macro)))
+         (anon (l_if flag (cadr module-macro) 'anon))
+         (new-module-macro (l_if flag (car module-macro) module-macro))
+         (args (caddr (macroexpand-1 `(,new-module-macro ,anon ,@module-args )))))
      (remove-if #'null
         (mapcar #'(lambda (x)
            (let* ((vname-or-lst (cadr x))

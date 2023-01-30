@@ -1,0 +1,279 @@
+(make-prologue)
+
+(use if-utils)
+(use psdma)
+
+;----------------------------------------------------------------
+
+        
+;----------------------------------------------------------------
+(defmacro make-req-selector (module-name read-req-n write-req-n data-width addr-width)
+  (let ((req-n (l_+ read-req-n write-req-n)))
+  `(module ,module-name 
+     ((input clk)
+      (input rst)
+
+      ; psdma read I/F
+      ,@(make-psdma-read-access-if 'read_)
+
+      ; psdma write I/F
+      ,@(make-psdma-write-access-if 'write_)
+
+      (input psdma_busy)
+
+      ,@(make-serial-no-if make-psdma-read-if 'read read-req-n data-width addr-width)
+      ,@(make-serial-no-if make-psdma-write-if 'write write-req-n data-width addr-width))
+
+      (reg= busy 0)
+      (always ((posedge clk))
+        (<=# busy psdma_busy))
+
+      (reg= (,req-n sel) (d ,req-n 0))
+      (wire sel_busy)
+      (assign sel_busy (| sel))
+
+      (reg= (3 status) 0)
+
+      (wire (,read-req-n read_sel))
+      (assign read_sel (ref sel ,(l_- read-req-n 1) 0))
+      (wire (,write-req-n write_sel))
+      (assign write_sel (ref sel ,(l_- req-n 1) ,read-req-n))
+
+      (reg= wait_busy 0)
+      ;----------------------------------------------------------------
+      (wire read0_req_valid_sel)  
+      (assign read0_req_valid_sel (& wait_busy read0_req_valid (ref read_sel 0)))
+      (assign read0_req_ready (& read_req_ready (ref read_sel 0)))
+      (assign read0_data_enable (& read_data_enable (ref read_sel 0)))
+      (assign read0_data read_data)
+
+      (wire read1_req_valid_sel)  
+      (assign read1_req_valid_sel (& wait_busy read1_req_valid (ref read_sel 1)))
+      (assign read1_req_ready (& read_req_ready (ref read_sel 1)))
+      (assign read1_data_enable (& read_data_enable (ref read_sel 1)))
+      (assign read1_data read_data)
+
+      ;----------------------------------------------------------------
+      (assign read_req_valid (| read0_req_valid_sel read1_req_valid_sel))
+
+      ;----------------------------------------------------------------
+      (wire write0_req_valid_sel)  
+      (assign write0_req_valid_sel (& wait_busy write0_req_valid (ref write_sel 0)))
+      (assign write0_req_ready write_req_ready)
+      (assign write_data_enable write0_data_enable)
+      (assign write_data write0_data)
+
+      ;----------------------------------------------------------------
+      (assign write_req_valid write0_req_valid_sel)
+
+      (always ((posedge clk))
+        (case status
+          (#b000
+            (if (| read0_req_valid read1_req_valid write0_req_valid)
+              (<=# status #b001))
+            (cond
+              (read0_req_valid
+                (<=# (ref sel 0) 1))
+
+              (read1_req_valid
+                (<=# (ref sel 1) 1))
+
+              (write0_req_valid
+                (<=# (ref sel 2) 1))))
+
+          ; Wait Busy
+          (#b001 
+            (<=# wait_busy 1)
+            (if busy
+              (<=# status #b011)))
+
+          ; Busy
+          (#b011
+            (<=# wait_busy 0)
+            (if (! busy)
+              (<=# status #b010)))
+
+          (#b010
+            (<=# sel (d ,req-n 0))
+            (<=# status #b000))))
+      )))
+
+;(print `(:range ,(foreach i (range 3) `(:i, i))) *error-output*)
+
+;----------------------------------------------------------------
+(defun do-valid-wait-ready (sym &key (clock 'clk))
+  `((= ,(symcat sym '_valid_r) 1)
+    (wait (== ,(symcat sym '_ready_w) 1))
+    (if ,clock (wait (== ,clock 0)))
+    (wait (== ,clock 1))
+    (= ,(symcat sym '_valid_r) 0)))
+
+(defun do-valid-wait-ready (sym &key (clock 'clk))
+  `((= ,(symcat sym '_valid_r) 1)
+    (wait (== ,(symcat sym '_ready_w) 1))
+    (# 10)
+    (= ,(symcat sym '_valid_r) 0)))
+
+(defun wait-valid-do-ready (sym &key (clock 'clk))
+  `((wait (== ,(symcat sym '_valid_w) 1))
+    (= ,(symcat sym '_ready_r) 1)
+    (# 12)
+    (= ,(symcat sym '_ready_r) 0)))
+
+;----------------------------------------------------------------
+(tb-main (eq *__name__* :__main__)
+  (setf *transport-delay* 1)
+
+  (use clocks)
+  (use signal-log)
+
+  (make-clock clock)
+  (make-signal-log data1)
+
+  (let* ((sel-module '(make-req-selector sel21 2 1 64 21)))
+    (eval sel-module)
+    (eval
+    `(module tb ()
+       (wire clk)
+       (reg= rst 0)
+       (reg= tb_is_finished 0)
+
+       (clock :name clock0 clk)
+  
+       (wire ,@(make-wire-list-from-module sel-module :filter #'(lambda (x) (eq (car x) 'output))))
+       ,@(make-reg-wire-assign sel-module)
+       (sel21 :name sel21_0 clk rst ,@(make-wire-list-from-module sel-module :only-name t))
+
+       (data1 :name count_read_data_enable clk read_data_enable_w tb_is_finished)
+       (data1 :name count_write_data_enable clk write_data_enable_w tb_is_finished)
+
+       ;----------------------------------------------------------------
+       (reg= (3 wstatus) 0)
+       (reg= (3 rstatus) 0)
+       (reg (5 rcount))
+       (reg (5 wcount))
+       (reg= wr_error 0)
+
+       (always ((posedge clk))
+         (<=# psdma_busy_r (| (| rstatus) (| wstatus))))
+
+       (always ((posedge clk))
+         (case rstatus
+            (#b000
+              (<=# read_req_ready_r 0)
+              (<=# read_data_enable_r 0)
+              (if (& (== read_req_valid_w 1) (== wstatus #b000))
+                (<=# rstatus #b010)))
+            (#b010
+              (let ((*transport-delay* 3))
+                (<=# read_req_ready_r 1))
+              (<=# rstatus #b011))
+            (#b011
+              (let ((*transport-delay* 7))
+                (<=# read_req_ready_r 0))
+              (<=# rcount 19)
+              (<=# rstatus #b111))
+            (#b111
+              (if (== rcount 0)
+                (<=# rstatus #b110))
+              (<=# rcount (- rcount 1)))
+            (#b110
+              (<=# read_data_enable_r 1)
+              (<=# read_data_r (d 64 #x1234567890abcdef))
+              (<=# rcount 31)
+              (<=# rstatus #b100))
+            (#b100
+              (if (== rcount 0)
+                (progn
+                  (<=# read_data_enable_r 0)
+                  (<=# rstatus #b101)))
+              (<=# read_data_r (+ read_data_r 1))
+              (<=# rcount (- rcount 1)))
+            (#b101
+              (<=# read_data_r (cat* 64 (cat (b 1 x))))
+              (<=# rstatus #b000))))
+
+       (always ((posedge clk))
+         (case wstatus
+            (#b000
+              (<=# write_req_ready_r 0)
+              (if (& (== write_req_valid_w 1) (== read_req_valid_w 0) (== rstatus #b000))
+                (<=# wstatus #b010)))
+            (#b010
+              (let ((*transport-delay* 3))
+                (<=# write_req_ready_r 1))
+              (<=# wstatus #b011))
+            (#b011
+              (let ((*transport-delay* 7))
+                (<=# write_req_ready_r 0))
+              (<=# wcount 31)
+              (<=# wstatus #b111))
+            (#b111
+              (if (== write_data_enable_w 0)
+                (<=# wr_error 1))
+              (if (== wcount 0)
+                (<=# wstatus #b110))
+              (<=# wcount (- wcount 1)))
+            (#b110
+              (if (== write_data_enable_w 1)
+                (<=# wr_error 1))
+              (<=# wcount 31)
+              (<=# wstatus #b100))
+            (#b100
+              (if (== wcount 0)
+                (<=# wstatus #b101))
+              (<=# wcount (- wcount 1)))
+            (#b101
+              (<=# wstatus #b000))))
+      
+       (initial
+         (dumpfile "vcd/req-selector.vcd")
+         (dumpvars 0 tb)
+
+         ,@(foreach i (make-wire-list-from-module sel-module :ignore-sym-lst '(clk rst read_req_ready) :add-postfix '_r :filter #'(lambda (x) (l_and (eq (car x) 'input) (atom (cadr x)))))
+                  `(= ,i 0))
+
+         (# 100 :pass)
+         (= rst 0)
+         (# 100) (= rst 1)
+         (# 100) (= rst 0)
+
+         ,@(do-valid-wait-ready 'read0_req)
+
+         (wait (== read_data_enable_w 1))
+         (# 20 :pass)
+         (= write0_req_valid_r 1)
+         ,@(do-valid-wait-ready 'read1_req)
+
+         (wait (== read_data_enable_w 1))
+         (# 20 :pass)
+         ,@(do-valid-wait-ready 'write0_req)
+         (= write0_data_enable_r 1)
+         (= write0_data_r (d 64 #x1234567890abcdef))
+         (v_repeat 32
+           (# 10)
+           (= write0_data_r (+ write0_data_r 1)))
+         (= write0_data_r (cat* 64 (cat (b 1 x))))
+         (= write0_data_enable_r 0)
+         (# 100)
+         (= write0_req_valid_r 1)
+         (# 100)
+
+         ,@(do-valid-wait-ready 'read0_req)
+
+         (# 20 :pass)
+         (wait (== read_data_enable_w 1))
+         (# 20 :pass)
+         (wait (== read_data_enable_w 0))
+         
+         (# 20 :pass)
+         (wait (== write0_req_ready_w 1))
+         (= write0_data_enable_r 1)
+         (= tb_is_finished 1)
+         (# 20)
+         (if (== wr_error 1)
+           (display "Write Error!!!!!!!!!!!!"))
+         (finish))))))
+         
+
+(make-epilogue)
