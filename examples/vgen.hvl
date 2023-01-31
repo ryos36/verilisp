@@ -1,0 +1,213 @@
+(make-prologue)
+
+(defparameter *PIXEL-BYTES* 4)
+(defparameter *SCREEN-WIDTH* 640)
+(defparameter *SCREEN-HEIGHT* 480)
+(defparameter *RAM-ADDR-WIDTH* 21)
+(defparameter *RAM-DATA-WIDTH* 64)
+(defparameter *BEAT-N* 32)
+(defparameter *RAM-DELTA-ADDR* 64)
+(defparameter *RAM-STRIDE* (l_* *RAM-DELTA-ADDR* 16))
+
+(use if-utils)
+(use psdma)
+(use axis)
+
+;----------------------------------------------------------------
+(defmacro make-vgen-module (module-name &key 
+    (ram-addr 0)
+    (look-ahead-n 3)
+    (screen-width *SCREEN-WIDTH*)
+    (screen-height *SCREEN-HEIGHT*)
+    (beat-n *BEAT-N*)
+    (ram-data-width *RAM-DATA-WIDTH*) 
+    (ram-addr-width *RAM-ADDR-WIDTH*)
+    (delta_addr *RAM-DELTA-ADDR*)
+    (ram-stride *RAM-STRIDE*))
+  (let* ((line-size (l_* screen-width *PIXEL-BYTES*))
+         (vcount-bit-width 
+           (multiple-value-bind (a b) (floor (l_log screen-height) (l_log 2)) (l_if (l_> b 0) (l_+ 1 a) a)))
+         (hcount-max (floor (l_* screen-width *PIXEL-BYTES*) (l_* beat-n (floor *RAM-DATA-WIDTH* 8))))
+         (hcount-bit-width
+           (multiple-value-bind (a b) (floor (l_log hcount-max) (l_log 2)) (l_if (l_> b 0) (l_+ 1 a) a)))
+         (look-ahead-width 
+           (multiple-value-bind (a b) (floor (l_log look-ahead-n) (l_log 2)) (l_if (l_> b 0) (l_+ 1 a) a))))
+    `(module ,module-name 
+       ((input clk)
+        (input rst)
+
+        ; psdma read I/F
+        ,@(make-psdma-read-access-if 'read_)
+
+        ; AXIS I/F
+        ,@(make-axis-main-if 'read_ ram-data-width)
+
+        ; timing generato I/F
+        (input hsync)
+        (input vsync)
+        (input henable)
+        (input venable))
+
+       (reg vsync_r)
+
+       (always ((posedge clk))
+         (<=# vsync_r vsync))
+
+       (reg= (4 status) 0)
+       (reg (,ram-addr-width ram_addr))
+       (reg (,ram-addr-width iter_addr))
+       (assign read_addr iter_addr)
+       (reg= read_req_valid_r 0)
+       (assign read_req_valid read_req_valid_r)
+
+       ;,@(make-axis-main-reg 'read_ ram-data-width)
+
+       (assign read_tlast (& (== hcount 0) (~ read_data_enable) read_tvalid_r))
+       (reg read_tuser_r)
+       (assign read_tuser read_tuser_r)
+       (reg (,ram-data-width read_tdata_r))
+       (assign read_tdata read_tdata_r)
+       (reg= read_tvalid_r 0)
+       (assign read_tvalid read_tvalid_r)
+
+       (reg (,vcount-bit-width vcount))
+       (reg (,hcount-bit-width hcount))
+       (reg henable_d)
+
+       (always ((posedge clk))
+         (<=# read_tdata_r read_data)
+         (<=# read_tvalid_r read_data_enable)
+         (<=# henable_d henable)
+
+         (case status
+           (#b0000
+            (<=# read_tuser_r 1)
+            (<=# ram_addr ,ram-addr)
+            (<=# vcount ,(l_- look-ahead-n 1))
+
+            (if (& (== vsync_r 0) (== vsync 1))
+              (<=# status #b0001)))
+
+           (#b0001
+             (<=# iter_addr ram_addr)
+             (<=# hcount ,(l_- hcount-max 1))
+             (<=# status #b0011))
+
+           (#b0011
+             (<=# read_req_valid_r 1)
+             (<=# status #b0010))
+
+           (#b0010
+             (if (== read_req_ready 1)
+               (progn
+                 (<=# read_req_valid_r 0)
+                 (<=# iter_addr (+ iter_addr ,delta_addr))
+                 (<=# status #b0110))))
+
+           (#b0110
+             (if (== read_data_enable 1)
+               (<=# status #b0111)))
+
+           (#b0111
+             (<=# read_tuser_r 0)
+             (if (== read_data_enable 0)
+                 (<=# status #b0101)))
+
+           (#b0101
+             (if (== hcount 0)
+                (progn
+                  (if (== vcount 0)
+                    (<=# status #b0100)
+                    (<=# status #b0001))
+                  (<=# ram_addr (+ ram_addr ,ram-stride))
+                  (<=# vcount (- vcount 1)))
+                (<=# status #b0011)))
+
+           (#b0100
+             (<=# vcount ,(l_- screen-width look-ahead-n 1))
+             (<=# status #b1100))
+             
+           (#b1100
+             (<=# hcount ,(l_- hcount-max 1))
+             (if (& (== henable_d 1) (== henable 0)) 
+               (<=# status #b1110)))
+
+           (#b1110
+             (<=# read_req_valid_r 1)
+             (<=# status #b1111))
+
+           (#b1111
+             (if (== read_req_ready 1)
+               (progn
+                 (<=# read_req_valid_r 0)
+                 (<=# iter_addr (+ iter_addr ,delta_addr))
+                 (<=# status #b1101))))
+
+           (#b1101
+             (if (== read_data_enable 1)
+               (<=# status #b1001)))
+
+           (#b1001
+             (<=# read_tuser_r 0)
+             (if (== read_data_enable 0)
+                 (<=# status #b1000)))
+
+           (#b1000
+             (if (== hcount 0)
+                (progn
+                  (if (== vcount 0)
+                    (<=# status #b0000)
+                    (<=# status #b1100))
+                  (<=# ram_addr (+ ram_addr ,ram-stride))
+                  (<=# vcount (- vcount 1)))
+                (<=# status #b1110)))
+      ); case
+
+      ); always
+         )
+         ))
+
+(show-module-if 'make-vgen-module)
+;(show-module-reg 'make-vcache-module 'cache_mem)
+
+;----------------------------------------------------------------
+(tb-main (eq *__name__* :__main__)
+  (setf *transport-delay* 1)
+  (use clocks)
+  (use signal-log)
+  (make-signal-log data1)
+
+  (make-clock clock)
+  (make-vgen-module vgen)
+  (make-reg-wire-assign 'make-vgen-module)
+
+  (eval
+    `(module tb()
+      (wire clk)
+      (reg= rst 0)
+  
+      (clock :name clock0 clk)
+
+      (wire ,@(make-wire-list-from-module 'make-vgen-module :filter #'(lambda (x) (eq (car x) 'output))))
+
+      ,@(make-reg-wire-assign 'make-vgen-module)
+
+      (vgen :name vgen0 clk rst ,@(make-wire-list-from-module 'make-vgen-module :only-name t))
+
+      (reg= tb_is_finished 0)
+;      (data1 :name read_data_enable_count clk read_data_enable_w tb_is_finished)
+;      (data1 :name write_data_enable clk write_data_enable_w tb_is_finished)
+
+    (initial
+      (dumpfile "vcd/vgen.vcd")
+      (dumpvars 0 tb)
+
+      ,@(foreach i (make-wire-list-from-module 'make-vgen-module :add-postfix '_r :filter #'(lambda (x) (l_and (eq (car x) 'input) (atom (cadr x)))))
+                 `(= ,i 0))
+
+      (# 20)
+      (= tb_is_finished 1)
+      (# 200)
+      (finish)))))
+
+(make-epilogue)

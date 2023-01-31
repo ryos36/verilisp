@@ -3,8 +3,9 @@ install_dir = /tmp/install
 build all: phony lib v exe
 default all
 build lib: phony lib/gege.hvlib lib/sim-psram.hvlib lib/psdma.hvlib lib/if-utils.hvlib lib/axis.hvlib
-build v: phony _build/vcache.v _build/timing-generator.v _build/test.v _build/sys-tb.v _build/ryos-mod.v _build/gege.v _build/sim_count.v _build/sim-psram.v _build/req-selector.v _build/ren.v _build/psdma.v _build/macro_sim_count.v _build/image_to_axis.v _build/if-utils.v _build/axis.v
-build exe: phony _build/vcache _build/timing-generator _build/test _build/sys-tb _build/ryos-mod _build/gege _build/sim_count _build/sim-psram _build/req-selector _build/ren _build/psdma _build/macro_sim_count _build/image_to_axis _build/if-utils _build/axis
+build v: phony _build/vgen.v _build/vcache.v _build/timing-generator.v _build/test.v _build/sys-tb.v _build/ryos-mod.v _build/gege.v _build/sim_count.v _build/sim-psram.v _build/req-selector.v _build/ren.v _build/psdma.v _build/macro_sim_count.v _build/image_to_axis.v _build/if-utils.v _build/axis.v
+build exe: phony _build/vgen _build/vcache _build/timing-generator _build/test _build/sys-tb _build/ryos-mod _build/gege _build/sim_count _build/sim-psram _build/req-selector _build/ren _build/psdma _build/macro_sim_count _build/image_to_axis _build/if-utils _build/axis
+build _build/vgen.v: translate vgen.hvl
 build _build/vcache.v: translate vcache.hvl
 build _build/timing-generator.v: translate timing-generator.hvl
 build _build/test.v: translate test.hvl
@@ -20,6 +21,7 @@ build _build/macro_sim_count.v: translate macro_sim_count.hvl
 build _build/image_to_axis.v: translate image_to_axis.hvl
 build _build/if-utils.v: translate if-utils.hvl
 build _build/axis.v: translate axis.hvl
+build _build/vgen: compile _build/vgen.v
 build _build/vcache: compile _build/vcache.v
 build _build/timing-generator: compile _build/timing-generator.v
 build _build/test: compile _build/test.v

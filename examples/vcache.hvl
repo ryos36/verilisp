@@ -11,7 +11,7 @@
 (defparameter *RAM-DATA-WIDTH* 64)
 (defparameter *VRAM-LINE-STRIDE* (l_* 1024 *VCACHE-PIXEL-BYTES*))
 
-(use axis)
+(use if-utils)
 (use psdma)
 
 ;----------------------------------------------------------------
@@ -64,6 +64,9 @@
          (input (,vcache-height req_write_flush_vcache_line))
          (output req_write_into_ram_ready)
 
+         (input req_delete_start_addr_valid)
+         (output req_delete_start_addr_ready)
+
          (output (,vcache-height vcache_durty_line))
 
          (output processing)
@@ -88,6 +91,7 @@
         (assign io_rd_data io_rd_data_r)
 
         ;----------------------------------------------------------------
+        (reg= read_start_addr_is_valid 0)
         (reg (,ram-addr-width read_start_addr_r))
         (reg (,ram-addr-width iter_addr_r))
         (reg (,vcache-height iter_vcache_line_r))
@@ -102,6 +106,10 @@
         (reg= read_req_valid_r 0)
         (assign read_req_valid read_req_valid_r)
         (assign read_addr iter_addr_r)
+
+        ;----------------------------------------------------------------
+        (reg= req_delete_start_addr_ready_r 0)
+        (assign req_delete_start_addr_ready req_delete_start_addr_ready_r)
 
         ;----------------------------------------------------------------
         (reg= req_write_into_ram_ready_r 0)
@@ -149,9 +157,14 @@
                     (<=# status #b10000)
                     (<=# status #b00001)))
                   
+                (req_delete_start_addr_valid
+                  (<=# read_start_addr_is_valid 0)
+                  (<=# req_delete_start_addr_ready_r 1)
+                  (<=# status #b01111))
 
                 (req_read_from_ram_valid
                   (<=# now_writing_r 0)
+                  (<=# read_start_addr_is_valid 1)
                   (<=# req_read_from_ram_ready_r 1)
                   (<=# read_start_addr_r req_read_start_addr)
                   (<=# iter_addr_r req_read_start_addr)
@@ -208,15 +221,21 @@
               (<=# iter_vcache_line_r (cat (b 1 0) (ref iter_vcache_line_r ,(l_- vcache-height 1) 1)))
               (<=# vcount (- vcount 1)))
 
+            (#b01111
+              (<=# req_delete_start_addr_ready_r 0)
+              (<=# status #b00000))
+
             (#b10000
               (<=# req_write_into_ram_ready_r 0)
-              (if (ref iter_vcache_line_r 0)
-                (progn
-                  (<=# write_req_valid_r 1)
-                  (<=# beat_count (b ,beat-n-bit-width ,(l_- beat-n 1)))
-                  (<=# status #b10001))
-
-                (<=# status #b10011)))
+              (cond 
+                ((== read_start_addr_is_valid 0)
+                   (<=# status #b00000))
+                ((ref iter_vcache_line_r 0)
+                   (<=# write_req_valid_r 1)
+                   (<=# beat_count (b ,beat-n-bit-width ,(l_- beat-n 1)))
+                   (<=# status #b10001))
+                (else
+                  (<=# status #b10011))))
 
             (#b10001
               (if write_req_ready 
@@ -244,27 +263,15 @@
               (<=# iter_addr_r 
                (+ iter_addr_r ,vram-line-stride))
               (<=# iter_vcache_line_r (cat (b 1 0) (ref iter_vcache_line_r ,(l_- vcache-height 1) 1)))
-              (<=# vcount (- vcount 1)))))
+              (<=# vcount (- vcount 1))))))))
 
-
-#|
-        (always ((posedge clk))
-          (if (& io_rd cache_mem_access)
-                (case (ref io_mem_addr 1 0)
-                 ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i)) (incf i)
-                    `(,i (<=# io_rd_data_r (ref ,(symcat 'cache_mem old-i) (& (ref io_mem_addr ,cache-data-width 2) ,(l_- cache-data-size 1)))))))
-                        (make-list cache-data-n))))))
-|#
-                        )))
-
-;(show-module-if 'make-vcache-module)
+(show-module-if 'make-vcache-module)
 ;(show-module-reg 'make-vcache-module 'cache_mem)
 
 ;----------------------------------------------------------------
 (tb-main (eq *__name__* :__main__)
   (setf *transport-delay* 1)
   (use clocks)
-  (use if-utils)
   (use signal-log)
   (make-signal-log data1)
 
@@ -396,6 +403,7 @@
 
       (# 20)
       (= tb_is_finished 1)
+      (# 200)
       (finish)))))
 
 (make-epilogue)
