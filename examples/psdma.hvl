@@ -190,6 +190,56 @@
                     ; nothing to do
                     (<=# psman_status psman_status)))))))
 
+(defmacro make-psdma-read-test-module (module-name &optional (read-sym 'read_) (beat-n 32) (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
+  (let ((beat-n-bit-width (floor (l_log beat-n) (l_log 2.0))))
+    `(module ,module-name 
+        ((input clk)
+         (input rst)
+
+        ,@(make-psdma-read-if read-sym data-width addr-width))
+
+       (reg= read_req_ready_r 0)
+       (assign read_req_ready read_req_ready_r)
+       (reg= read_data_enable_r 0)
+       (assign read_data_enable read_data_enable_r)
+       (reg (,data-width read_data_r))
+       (assign read_data read_data_r)
+       (reg= (3 status) (d 3 0))
+       (reg (,beat-n-bit-width count))
+
+       (always ((posedge clk))
+         (case status
+           (#b000
+             (<=# read_req_ready_r 1)
+             (<=# status #b001))
+           (#b001
+             (if read_req_valid
+               (progn
+                 (<=# read_req_ready_r 0)
+                 (<=# status #b011))))
+           (#b011
+             (<=# read_data_enable_r 1)
+             (<=# read_data_r (d 64 #x1234567890abcdef))
+             (<=# count ,(l_- beat-n 1))
+             (<=# status #b010))
+           (#b010
+             (<=# read_data_r (+ read_data_r 1))
+             (if (== count 0)
+               (progn
+                 (<=# read_data_enable_r 0)
+                 (<=# read_data_r (cat* 64 (cat (b 1 x))))
+                 (<=# status #b110)))
+             (<=# count (- count 1)))
+           (#b110
+             (<=# count 31)
+             (<=# status #b111))
+           (#b111
+             (if (== count 0)
+               (<=# status #b101))
+             (<=# count (- count 1)))
+           (#b101
+             (<=# status #b000)))))))
+
 ;----------------------------------------------------------------
 (when (eq *__name__* :__main__)
   (use clocks)

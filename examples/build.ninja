@@ -3,8 +3,8 @@ install_dir = /tmp/install
 build all: phony lib v exe
 default all
 build lib: phony lib/gege.hvlib lib/sim-psram.hvlib lib/psdma.hvlib lib/if-utils.hvlib lib/axis.hvlib
-build v: phony _build/vgen.v _build/vcache.v _build/timing-generator.v _build/test.v _build/sys-tb.v _build/ryos-mod.v _build/gege.v _build/sim_count.v _build/sim-psram.v _build/req-selector.v _build/ren.v _build/psdma.v _build/macro_sim_count.v _build/image_to_axis.v _build/if-utils.v _build/axis.v
-build exe: phony _build/vgen _build/vcache _build/timing-generator _build/test _build/sys-tb _build/ryos-mod _build/gege _build/sim_count _build/sim-psram _build/req-selector _build/ren _build/psdma _build/macro_sim_count _build/image_to_axis _build/if-utils _build/axis
+build v: phony _build/vgen.v _build/vcache.v _build/timing-generator.v _build/test.v _build/sys-tb.v _build/ryos-mod.v _build/gege.v _build/simple-sprite.v _build/sim_count.v _build/sim-psram.v _build/req-selector.v _build/ren.v _build/psdma.v _build/macro_sim_count.v _build/image_to_axis.v _build/if-utils.v _build/axis.v
+build exe: phony _build/vgen _build/vcache _build/timing-generator _build/test _build/sys-tb _build/ryos-mod _build/gege _build/simple-sprite _build/sim_count _build/sim-psram _build/req-selector _build/ren _build/psdma _build/macro_sim_count _build/image_to_axis _build/if-utils _build/axis
 build _build/vgen.v: translate vgen.hvl
 build _build/vcache.v: translate vcache.hvl
 build _build/timing-generator.v: translate timing-generator.hvl
@@ -12,6 +12,7 @@ build _build/test.v: translate test.hvl
 build _build/sys-tb.v: translate sys-tb.hvl
 build _build/ryos-mod.v: translate src/ryos-mod.hvl
 build _build/gege.v: translate src/gege.hvl
+build _build/simple-sprite.v: translate simple-sprite.hvl
 build _build/sim_count.v: translate sim_count.hvl
 build _build/sim-psram.v: translate sim-psram.hvl
 build _build/req-selector.v: translate req-selector.hvl
@@ -28,6 +29,7 @@ build _build/test: compile _build/test.v
 build _build/sys-tb: compile _build/sys-tb.v
 build _build/ryos-mod: compile _build/ryos-mod.v
 build _build/gege: compile _build/gege.v
+build _build/simple-sprite: compile _build/simple-sprite.v
 build _build/sim_count: compile _build/sim_count.v
 build _build/sim-psram: compile _build/sim-psram.v
 build _build/req-selector: compile _build/req-selector.v

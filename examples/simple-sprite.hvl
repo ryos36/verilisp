@@ -1,0 +1,303 @@
+(make-prologue)
+
+(defparameter *PIXEL-BYTES* 4)
+(defparameter *RAM-ADDR-WIDTH* 21)
+(defparameter *RAM-DATA-WIDTH* 64)
+(defparameter *BEAT-N* 32)
+
+(defparameter *RAM-DELTA-ADDR* 64)
+;(defparameter *RAM-STRIDE* (l_* *RAM-DELTA-ADDR* 16))
+(defparameter *RAM-STRIDE* #x1000)
+(defparameter *RAM-HEIGHT* 3)
+
+(use if-utils)
+(use psdma)
+
+;----------------------------------------------------------------
+(defun calc-width (value)
+  (multiple-value-bind (a b) (floor (l_log value) (l_log 2)) (l_if (l_> b 0) (l_+ 1 a) a)))
+
+(defun remove-postfix (sym postfix-sym)
+  (let* ((name (string-downcase (symbol-name sym)))
+         (name-len (length name))
+         (name-2 (subseq name 0 (l_- name-len 2)))
+         (last2 (subseq name (l_- name-len 2)))
+         (name-postfix (l_if (l_> name-len 2) last2)))
+
+         (symcat 
+           (l_if (l_and name-postfix (string= name-postfix (string-downcase (symbol-name postfix-sym))))
+             name-2
+             name))))
+
+(defmacro reg-assign (name &optional (value 0))
+  `(progn
+     (reg= ,name ,value)
+     (assign ,(remove-postfix name '_r) ,name)))
+
+;----------------------------------------------------------------
+(defmacro make-simple-sprite-module (module-name &key 
+    (beat-n *BEAT-N*)
+    (screen-width 640)
+    (ram-addr-width *RAM-ADDR-WIDTH*)
+    (ram-data-width *RAM-DATA-WIDTH*)
+    (ram-stride *RAM-STRIDE*)
+    (ram-height *RAM-HEIGHT*))
+  (let* ((beat-count-width (calc-width beat-n))
+         (vcache-bytes (l_* 32 8 32))
+         (cache-data-width 16)
+         (cache-data-n (floor ram-data-width cache-data-width))
+         (cache-data-size-by-ram (floor (l_* vcache-bytes 8) ram-data-width))
+         (cache-data-width-by-ram (calc-width cache-data-size-by-ram))
+         (cache-data-size (floor (l_* vcache-bytes 8) cache-data-width))
+         (end-ram-offset-addr (l_* *RAM-STRIDE* (l_- *RAM-HEIGHT* 1))))
+    `(module ,module-name 
+       ((input clk)
+        (input rst)
+
+        ; psdma read access I/F
+        ,@(make-psdma-read-access-if 'read_access_)
+
+        ; psdma read I/F
+        ,@(make-psdma-read-if 'read_)
+
+        (input req_cache_valid)
+        (input (,ram-addr-width req_cache_start_addr))
+        (output req_cache_ready)
+
+        (input req_delete_cache_valid)
+        (output req_delete_cache_ready))
+
+       ;----------------------------------------------------------------
+        ,@(let ((i 0)) (mapcar #'(lambda (x) (let ((rv i)) (incf i) 
+            `(reg (,cache-data-width (,cache-data-size-by-ram ,(symcat 'cache_mem rv)))))) (make-list cache-data-n)))
+        
+       ;----------------------------------------------------------------
+       (reg-assign req_cache_ready_r 1)
+       (reg-assign req_delete_cache_ready_r 1)
+       (reg= cache_is_valid 0)
+       (reg (,ram-addr-width cache_start_addr))
+       (reg (,ram-addr-width cache_end_addr))
+       (assign read_access_addr read_addr)
+
+       (always ((posedge clk))
+         (cond 
+           (req_cache_valid
+             (progn
+               (<=# cache_is_valid 1)
+               (<=# cache_start_addr req_cache_start_addr)
+               (<=# cache_end_addr (+ req_cache_start_addr ,end-ram-offset-addr))))
+           (req_delete_cache_valid
+             (<=# cache_is_valid 0))))
+
+       ;----------------------------------------------------------------
+       (reg= read_req_ready_r 0)
+       (assign read_req_ready read_req_ready_r)
+       (reg (,ram-addr-width req_read_addr_r))
+       (reg (,ram-addr-width iter_addr_r))
+       (reg= ram_data_enable_r 0)
+
+       (reg= (5 status) (d 5 0))
+       (reg (,beat-count-width beat_count))
+
+       (reg-assign read_access_req_valid_r 0)
+
+       (assign read_data_enable 
+         (| read_access_data_enable ram_data_enable_r))
+
+       (wire (,ram-data-width ram_data))
+
+       (reg (,beat-count-width vcache_addr_w))
+       (assign vcache_addr_w (~ beat_count))
+       (assign ram_data (cat 
+              ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i)) (incf i)
+                  `(ref ,(symcat 'cache_mem old-i) vcache_addr_w))) (make-list cache-data-n))
+                  )))
+
+       (assign read_data (? ram_data_enable_r ram_data read_access_data))
+
+       (always ((posedge clk))
+         (case status
+           (#b00000
+             (<=# read_req_ready_r 1)
+             (<=# status #b00001))
+           (#b00001
+             (if read_req_valid
+               (progn
+                 (<=# read_req_ready_r 0)
+                 (<=# req_read_addr_r read_addr)
+                 (if cache_is_valid
+                   (<=# status #b00011)
+                   (<=# status #b10000)))))
+
+           (#b00011
+             (cond
+               ((== req_read_addr_r cache_start_addr)
+                 (<=# status #b00010))
+               ((== req_read_addr_r iter_addr_r)
+                 (<=# status #b00110))
+               (else
+                 (<=# status #b10000))))
+
+           (#b00010
+             (<=# iter_addr_r cache_start_addr)
+             (<=# status #b00110))
+
+           (#b00110
+             (<=# beat_count ,(l_- beat-n 1))
+             (if (! (== iter_addr_r cache_end_addr))
+               (<=# iter_addr_r (+ iter_addr_r ,ram-stride))
+               (<=# iter_addr_r (cat* ,*RAM-ADDR-WIDTH* (cat (b 1 x)))))
+             (<=# ram_data_enable_r 1)
+             (<=# status #b00111))
+
+           (#b00111
+             (if (== beat_count (d ,beat-count-width 0))
+               (progn
+                 (<=# ram_data_enable_r 0)
+                 (<=# status #b00101)))
+             (<=# beat_count (- beat_count 1)))
+
+           (#b00101
+              (<=# status #b00000))
+
+           (#b10000
+             (<=# read_access_req_valid_r 1)
+             (<=# status #b10001))
+
+           (#b10001
+             (if read_access_req_ready 
+               (progn
+                 (<=# read_access_req_valid_r 0)
+                 (<=# status #b10011))))
+
+           (#b10011
+             (if read_access_data_enable
+               (<=# status #b10010)))
+
+           (#b10010
+             (if (== read_access_data_enable 0)
+              (<=# status #b10110)))
+
+           (#b10110
+             (<=# status #b00000)))))))
+
+(show-module-if 'make-simple-sprite-module)
+
+;----------------------------------------------------------------
+(tb-main (eq *__name__* :__main__)
+  (setf *transport-delay* 1)
+  (use clocks)
+  (use signal-log)
+  (make-signal-log data1)
+
+  (make-clock clock)
+  (make-simple-sprite-module simple_sprite)
+  (make-reg-wire-assign 'make-simple-sprite-module)
+
+  (make-psdma-read-test-module read_test_module)
+  ;(show-module-if 'make-psdma-read-test-module)
+
+  (eval
+    `(module tb()
+       (wire clk)
+       (reg= rst 0)
+  
+       (clock :name clock0 clk)
+
+       ;(wire req_cache_valid_w)
+       ;(wire (,*RAM-ADDR-WIDTH* req_cache_start_addr_w))
+       (wire req_cache_ready_w)
+       ;(wire req_delete_cache_valid_w)
+       (wire req_delete_cache_ready_w)
+
+       ;(reg= req_cache_valid_r 0)
+       ;(reg (,*RAM-ADDR-WIDTH* req_cache_start_addr_r))
+       ;(reg= req_delete_cache_valid_r 0)
+
+       (wire read_req_ready_w)
+       (wire read_data_enable_w)
+       (wire (,*RAM-DATA-WIDTH* read_data_w))
+
+       (wire (,*RAM-ADDR-WIDTH* read_access_addr_w))
+       (wire read_access_req_valid_w)
+       (wire read_access_req_ready_w)
+       (wire read_access_data_enable_w)
+       (wire (,*RAM-DATA-WIDTH* read_access_data_w))
+
+       (reg (,*RAM-DATA-WIDTH* read_addr_r))
+       (reg= read_req_valid_r 0)
+       (wire (,*RAM-ADDR-WIDTH* read_addr_w))
+       (wire read_req_valid_w)
+       (assign read_addr_w read_addr_r)
+       (assign read_req_valid_w read_req_valid_r)
+
+       (reg= req_cache_valid_r 0)
+       (reg (,*RAM-ADDR-WIDTH* req_cache_start_addr_r))
+       (reg= req_delete_cache_valid_r 0)
+       (wire req_cache_valid_w)
+       (wire (,*RAM-ADDR-WIDTH* req_cache_start_addr_w))
+       (wire req_delete_cache_valid_w)
+       (assign req_cache_valid_w req_cache_valid_r)
+       (assign req_cache_start_addr_w req_cache_start_addr_r)
+       (assign req_delete_cache_valid_w req_delete_cache_valid_r)
+
+       (simple_sprite :name sprite0 clk rst ,@(make-wire-list-from-module 'make-simple-sprite-module :only-name t))
+
+       (read_test_module :name rtest0 clk rst read_access_addr_w read_access_req_valid_w read_access_req_ready_w read_access_data_enable_w read_access_data_w)
+
+       (reg= tb_is_finished 0)
+
+
+    ;(reg (,*RAM-ADDR-WIDTH* addr))
+    (initial
+      (dumpfile "vcd/simple-sprite.vcd")
+      (dumpvars 0 tb)
+
+      (# 200)
+      (= req_cache_valid_r 1)
+      (= req_cache_start_addr_r #x0100)
+      (wait (== req_cache_ready_w 1))
+      (# 10)
+      (= req_cache_valid_r 0)
+
+      (= read_addr_r 0)
+      (# 10)
+      (v_repeat 4
+        (v_repeat 3
+          (= read_req_valid_r 1)
+          (wait (== read_req_ready_w 0))
+          (= read_req_valid_r 0)
+          (wait (== read_data_enable_w 1))
+          (wait (== read_data_enable_w 0))
+          (# 100 :pass)
+          (= read_addr_r (+ read_addr_r #x0100)))
+        (# 100)
+        (= read_addr_r (+ (& read_addr_r #xF000) #x1000)))
+
+      (# 200)
+      (= req_delete_cache_valid_r 1)
+      (wait (== req_delete_cache_ready_w 1))
+      (# 10)
+      (= req_delete_cache_valid_r 0)
+
+      (= read_addr_r 0)
+      (# 10)
+      (v_repeat 4
+        (v_repeat 3
+          (= read_req_valid_r 1)
+          (wait (== read_req_ready_w 0))
+          (# 10)
+          (= read_req_valid_r 0)
+          (wait (== read_data_enable_w 1))
+          (wait (== read_data_enable_w 0))
+          (# 100 :pass)
+          (= read_addr_r (+ read_addr_r #x0100)))
+        (# 100)
+        (= read_addr_r (+ (& read_addr_r #xF000) #x1000)))
+
+      (# 20)
+      (= tb_is_finished 1)
+      (# 200)
+      (finish)))))
+
+(make-epilogue)

@@ -121,10 +121,11 @@
                     (<=# status #b0001))
                   (<=# ram_addr (+ ram_addr ,ram-stride))
                   (<=# vcount (- vcount 1)))
-                (<=# status #b0011)))
+                (<=# status #b0011))
+             (<=# hcount (- hcount 1)))
 
            (#b0100
-             (<=# vcount ,(l_- screen-width look-ahead-n 1))
+             (<=# vcount ,(l_- screen-height look-ahead-n 1))
              (<=# status #b1100))
              
            (#b1100
@@ -148,7 +149,6 @@
                (<=# status #b1001)))
 
            (#b1001
-             (<=# read_tuser_r 0)
              (if (== read_data_enable 0)
                  (<=# status #b1000)))
 
@@ -160,15 +160,10 @@
                     (<=# status #b1100))
                   (<=# ram_addr (+ ram_addr ,ram-stride))
                   (<=# vcount (- vcount 1)))
-                (<=# status #b1110)))
-      ); case
-
-      ); always
-         )
-         ))
+                (<=# status #b1110))
+             (<=# hcount (- hcount 1))))))))
 
 (show-module-if 'make-vgen-module)
-;(show-module-reg 'make-vcache-module 'cache_mem)
 
 ;----------------------------------------------------------------
 (tb-main (eq *__name__* :__main__)
@@ -198,12 +193,82 @@
 ;      (data1 :name read_data_enable_count clk read_data_enable_w tb_is_finished)
 ;      (data1 :name write_data_enable clk write_data_enable_w tb_is_finished)
 
+       (reg= (3 status) 0)
+       (reg (5 count))
+       (always ((posedge clk))
+         (case status
+           (#b000
+             (<=# read_req_ready_r 1)
+             (<=# status #b001))
+           (#b001
+             (if read_req_valid_w
+               (progn
+                 (<=# read_req_ready_r 0)
+                 (<=# status #b011))))
+           (#b011
+             (<=# read_data_enable_r 1)
+             (<=# read_data_r (d 64 #x1234567890abcdef))
+             (<=# count 31)
+             (<=# status #b010))
+           (#b010
+             (<=# read_data_r (+ read_data_r 1))
+             (if (== count 0)
+               (progn
+                 (<=# read_data_enable_r 0)
+                 (<=# read_data_r (cat* 64 (cat (b 1 x))))
+                 (<=# status #b110)))
+             (<=# count (- count 1)))
+           (#b110
+             (<=# count 31)
+             (<=# status #b111))
+           (#b111
+             (if (== count 0)
+               (<=# status #b101))
+             (<=# count (- count 1)))
+           (#b101
+             (<=# status #b000))))
+           
+
+    (reg= (32 mc) 0)
     (initial
       (dumpfile "vcd/vgen.vcd")
       (dumpvars 0 tb)
 
       ,@(foreach i (make-wire-list-from-module 'make-vgen-module :add-postfix '_r :filter #'(lambda (x) (l_and (eq (car x) 'input) (atom (cadr x)))))
                  `(= ,i 0))
+
+      (# 200)
+      #|
+      (= vsync_r 0)
+      (= hsync_r 0)
+      (= henable_r 0)
+      (= venable_r 0)
+      |#
+      (= read_tready_r 1)
+
+      (v_repeat 2 
+        (# 200)
+        (= vsync_r 1)
+        (# 200)
+        (= vsync_r 0)
+
+        (v_repeat 3 
+          (= mc (+ mc 1))
+          (v_repeat 10
+            (wait (== read_tvalid_w 1))
+            (wait (== read_tvalid_w 0))))
+
+        (# 2000)
+        (v_repeat (- 480 3)
+          (= mc (+ mc 1))
+          (v_repeat 10
+            (# 200)
+            (= henable_r 1)
+            (# 200)
+            (= henable_r 0)
+            (wait (== read_tvalid_w 1))
+            (wait (== read_tvalid_w 0))
+            (# 200 :pass))))
 
       (# 20)
       (= tb_is_finished 1)
