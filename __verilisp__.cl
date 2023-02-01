@@ -1068,6 +1068,7 @@
 ; all keywords which traditionally begin on a newline must call nli themselves.
 
 (defmacro v_module (name parameters &rest statements)
+    (assert (null (find #\- (string-downcase (symbol-name name)))) nil "Module name must not contain '-'. name:~a" name)
     (setq *in-module* t)
     (setq *current-module-contents* nil)
     (nli)
