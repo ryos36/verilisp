@@ -104,12 +104,12 @@
                 (string (char s 0))
             )
             (cdr-substr (s)
-                (substring s 1 (string-width s))
+                (substring s 1 (length s))
             )
         )
         (labels (
                 (re (s result iter)
-                    (if (> (string-width s) 0)
+                    (if (> (length s) 0)
                         (re
                             (cdr-substr s)
                             (+ (foo (first-substr s)) (* base result))
@@ -2102,13 +2102,15 @@
 ;;; END VERILISP LANGUAGE
 ;;; BEGIN PROCESSING OF STDIN
 
-(read-eval (read))
+(unless (boundp '*verilisp-standalone*)
+  (read-eval (read))
 
-(if *in-module*
-    (progn
-        (setq indentation 0)
-        (nli)
-        (write-string "endmodule")
-        (nli)
-    )
+  (if *in-module*
+      (progn
+          (setq indentation 0)
+          (nli)
+          (write-string "endmodule")
+          (nli)
+      )
+  )
 )

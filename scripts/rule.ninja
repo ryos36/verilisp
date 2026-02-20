@@ -1,4 +1,4 @@
-verilisp = ../verilisp.py
+verilisp = ../verilisp
 iverilog = iverilog
 iverilog_opt = -g2012
 lib_dir=./lib
