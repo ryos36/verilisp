@@ -2,3 +2,5 @@
 *.vcd
 examples/*.v
 work
+_DELETE/
+__pycache__/
