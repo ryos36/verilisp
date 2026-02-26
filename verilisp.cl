@@ -12,6 +12,12 @@
 ;;; Save post-init state of all-modules (contains primitives registered during load)
 (defvar *initial-all-modules* (copy-list all-modules))
 
+;;; Load AST system (Phase 1a)
+(load (concatenate 'string *verilisp-dir* "src/ast.cl"))
+(load (concatenate 'string *verilisp-dir* "src/emit.cl"))
+(load (concatenate 'string *verilisp-dir* "src/macros.cl"))
+(load (concatenate 'string *verilisp-dir* "tests/ast-tests.cl"))
+
 ;;; ============================================================
 ;;; Constants
 ;;; ============================================================
@@ -307,12 +313,16 @@
              (format t "  --dir DIR      Output directory~%")
              (format t "  --depfile FILE Generate depfile~%")
              (format t "  -t             Run tests~%")
+             (format t "  -ta            Run AST emit tests~%")
              (format t "  -h / --help    Show this help~%")
              (format t "  (no args)      stdin -> stdout~%"))
             ((string= arg "--mangle")
              (setq only-mangle t))
             ((string= arg "-t")
              (let ((failures (run-tests)))
+               (when (> failures 0) (ext:exit 1))))
+            ((string= arg "-ta")
+             (let ((failures (run-ast-tests)))
                (when (> failures 0) (ext:exit 1))))
             ((string= arg "--dir")
              (setq next-is-dir t))
