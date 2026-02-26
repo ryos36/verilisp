@@ -177,6 +177,33 @@ exec ros -Q -- $0 "$@"
     props)
 
 ;----------------------------------------------------------------
+(defun file-use-list (hvl-file)
+  "Return list of (use ...) symbols found in hvl-file."
+  (let (use-lst)
+    (with-open-file (in hvl-file :direction :input)
+      (do ((line (read-line in nil) (read-line in nil))) ((not line))
+        (let* ((use-pos (search *HVALA-USE* line))
+               (use-stmt (and use-pos (read-from-string (subseq line use-pos) nil)))
+               (use-sym (cadr use-stmt)))
+          (if (and use-stmt (not (member use-sym use-lst)))
+              (push use-sym use-lst)))))
+    use-lst))
+
+(defun resolve-implicit-deps (hvl-file lib-entries)
+  "Return string of implicit deps (Ninja | syntax) for hvl-file.
+   lib-entries is alist of (hvl-path . hvlib-name)."
+  (let* ((use-syms (file-use-list hvl-file))
+         (deps (remove-if #'null
+                 (mapcar #'(lambda (sym)
+                             (let ((entry (find-if #'(lambda (e)
+                                                      (string-equal (symbol-name sym)
+                                                                    (pathname-name (car e))))
+                                                   lib-entries)))
+                               (when entry
+                                 (format nil "~a/~a" *lib-dir* (cdr entry)))))
+                         use-syms))))
+    deps))
+
 (defun main (&rest argv)
   (declare (ignorable argv))
   (setf argv (analyze-arg argv))
@@ -191,7 +218,7 @@ exec ros -Q -- $0 "$@"
             (build (assoc :build props))
             (module (assoc :module props))
             (lib (assoc :lib props)))
-        (format out "include ~a~%" 
+        (format out "include ~a~%"
                 (if rule-file (cdr rule-file) *rule-file*))
         (if install-dir
             (format out "install_dir = ~a~%" (cdr install-dir)))
@@ -216,7 +243,12 @@ exec ros -Q -- $0 "$@"
         (write-char #\Newline out)
 
         (dolist (e (cdr build))
-          (format out "build ~a/~a~a: ~a ~a~%" *build-dir* (pathname-name e) *VERILOG-EXT* *TRANSLATE-RULE* e))
+          (let ((deps (when lib (resolve-implicit-deps e (cdr lib)))))
+            (if deps
+              (format out "build ~a/~a~a: ~a ~a | ~{~a~^ ~}~%"
+                      *build-dir* (pathname-name e) *VERILOG-EXT* *TRANSLATE-RULE* e deps)
+              (format out "build ~a/~a~a: ~a ~a~%"
+                      *build-dir* (pathname-name e) *VERILOG-EXT* *TRANSLATE-RULE* e))))
 
         (dolist (e (cdr build))
           (format out "build ~a/~a: ~a ~a/~a~a~%" *build-dir* (pathname-name e) *COMPILE-RULE* *build-dir* (pathname-name e) *VERILOG-EXT*))
