@@ -1,0 +1,4 @@
+(module test ((output (8 out)) (input (4 in)))
+  (assign out in))
+================================================================================
+Warning: test: width mismatch in assign: 'out' is 8 bits, 'in' is 4 bits

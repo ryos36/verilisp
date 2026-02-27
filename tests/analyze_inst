@@ -1,0 +1,8 @@
+(module sub ((input a) (output b))
+  (assign b a))
+(module top ()
+  (wire x y)
+  (sub (name a x) (name b y)))
+================================================================================
+Warning: top: signal 'y' is defined but never used
+Warning: top: signal 'x' is used but never driven

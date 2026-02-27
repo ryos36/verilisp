@@ -1,0 +1,6 @@
+(module test ()
+  (wire a b)
+  (assign a b)
+  (assign b a))
+================================================================================
+Warning: test: combinational loop: a -> b -> a
