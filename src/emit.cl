@@ -13,7 +13,7 @@
   (write-string s *emit-stream*))
 
 (defun emit-sym (s)
-  "Write symbol or number S to the emit stream."
+  "Write symbol, number, or string S to the emit stream."
   (if (and (symbolp s) (search "'" (symbol-name s)))
       (format *emit-stream* "~a" s)
       (write s :stream *emit-stream*)))
@@ -112,6 +112,9 @@
 
       ;; Progn (sequence of statements)
       (:progn       (dolist (stmt (cdr node)) (emit-node stmt)))
+
+      ;; Raw text (captured stdout output)
+      (:raw-text    (write-string (cadr node) *emit-stream*))
 
       ;; Operators
       (otherwise

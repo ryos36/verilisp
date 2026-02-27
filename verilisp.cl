@@ -12,11 +12,26 @@
 ;;; Save post-init state of all-modules (contains primitives registered during load)
 (defvar *initial-all-modules* (copy-list all-modules))
 
-;;; Load AST system (Phase 1a)
+;;; v_progn — needed because "progn" is in the mangle list.
+;;; In the old pipeline, just evaluate all forms sequentially (like CL progn).
+;;; The AST pipeline (core.cl) redefines this to return a :progn AST node.
+(defmacro v_progn (&rest body)
+  `(progn ,@body))
+
+;;; Load AST system (Phase 1a) — ast.cl and emit.cl are safe (no redefinitions)
 (load (concatenate 'string *verilisp-dir* "src/ast.cl"))
 (load (concatenate 'string *verilisp-dir* "src/emit.cl"))
-(load (concatenate 'string *verilisp-dir* "src/macros.cl"))
-(load (concatenate 'string *verilisp-dir* "tests/ast-tests.cl"))
+
+;;; core.cl and driver.cl redefine v_* macros for AST pipeline.
+;;; They are loaded on demand by load-ast-pipeline to avoid breaking
+;;; the old text-based pipeline.
+(defvar *ast-pipeline-loaded* nil)
+(defun load-ast-pipeline ()
+  "Load core.cl and driver.cl, replacing v_* macros with AST versions."
+  (unless *ast-pipeline-loaded*
+    (load (concatenate 'string *verilisp-dir* "src/core.cl"))
+    (load (concatenate 'string *verilisp-dir* "src/driver.cl"))
+    (setq *ast-pipeline-loaded* t)))
 
 ;;; ============================================================
 ;;; Constants
@@ -27,6 +42,7 @@
 
 (defparameter *names-to-mangle*
   '(;; special forms
+    "progn"
     "@" "fork" "release" "assign" "deassign" "task" "function" "=" "n="
     "delay" "#" "wait" "if" "module" "always" "initial" "cat" "cat*" "."
     "primitive" "table" "for" "fromto" "forallbits" "ref" "comment"
@@ -313,7 +329,7 @@
              (format t "  --dir DIR      Output directory~%")
              (format t "  --depfile FILE Generate depfile~%")
              (format t "  -t             Run tests~%")
-             (format t "  -ta            Run AST emit tests~%")
+             (format t "  -tn            Run new AST pipeline tests~%")
              (format t "  -h / --help    Show this help~%")
              (format t "  (no args)      stdin -> stdout~%"))
             ((string= arg "--mangle")
@@ -321,8 +337,9 @@
             ((string= arg "-t")
              (let ((failures (run-tests)))
                (when (> failures 0) (ext:exit 1))))
-            ((string= arg "-ta")
-             (let ((failures (run-ast-tests)))
+            ((string= arg "-tn")
+             (load-ast-pipeline)
+             (let ((failures (run-new-tests)))
                (when (> failures 0) (ext:exit 1))))
             ((string= arg "--dir")
              (setq next-is-dir t))

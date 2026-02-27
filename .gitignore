@@ -5,3 +5,5 @@ work
 _DELETE/
 __pycache__/
 info.txt
+*.fas
+*.lib
