@@ -407,8 +407,12 @@
                         (translate-code-ast code out
                                             :target *output-target*
                                             :analyze *do-analyze*))
+                      (undefined-function (e)
+                        (format *error-output* "Error in ~a: undefined function ~a~%" arg (cell-error-name e))
+                        (when (probe-file out-path)
+                          (delete-file out-path)))
                       (error (e)
-                        (declare (ignore e))
+                        (format *error-output* "Error in ~a: ~a [~a]~%" arg e (type-of e))
                         (when (probe-file out-path)
                           (delete-file out-path))))))
                  (t
