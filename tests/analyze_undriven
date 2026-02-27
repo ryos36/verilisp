@@ -1,0 +1,6 @@
+(module test ((input clk) (output out))
+  (wire mid)
+  (assign out mid))
+================================================================================
+Warning: test: signal 'clk' is defined but never used
+Warning: test: signal 'mid' is used but never driven

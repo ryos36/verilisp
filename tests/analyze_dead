@@ -1,0 +1,7 @@
+(module test ((input clk) (output out))
+  (wire unused_wire)
+  (reg unused_reg)
+  (assign out clk))
+================================================================================
+Warning: test: signal 'unused_reg' is defined but never used
+Warning: test: signal 'unused_wire' is defined but never used

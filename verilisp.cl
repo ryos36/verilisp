@@ -18,18 +18,21 @@
 (defmacro v_progn (&rest body)
   `(progn ,@body))
 
-;;; Load AST system (Phase 1a) — ast.cl and emit.cl are safe (no redefinitions)
+;;; Load AST system — ast.cl, emit.cl, emit-sv.cl are safe (no redefinitions)
 (load (concatenate 'string *verilisp-dir* "src/ast.cl"))
 (load (concatenate 'string *verilisp-dir* "src/emit.cl"))
+(load (concatenate 'string *verilisp-dir* "src/emit-sv.cl"))
 
-;;; core.cl and driver.cl redefine v_* macros for AST pipeline.
+;;; core.cl, transform.cl, analyze.cl, driver.cl redefine v_* macros for AST pipeline.
 ;;; They are loaded on demand by load-ast-pipeline to avoid breaking
 ;;; the old text-based pipeline.
 (defvar *ast-pipeline-loaded* nil)
 (defun load-ast-pipeline ()
-  "Load core.cl and driver.cl, replacing v_* macros with AST versions."
+  "Load AST pipeline files, replacing v_* macros with AST versions."
   (unless *ast-pipeline-loaded*
     (load (concatenate 'string *verilisp-dir* "src/core.cl"))
+    (load (concatenate 'string *verilisp-dir* "src/transform.cl"))
+    (load (concatenate 'string *verilisp-dir* "src/analyze.cl"))
     (load (concatenate 'string *verilisp-dir* "src/driver.cl"))
     (setq *ast-pipeline-loaded* t)))
 
@@ -253,6 +256,12 @@
 ;;; Test Runner
 ;;; ============================================================
 
+(defun old-test-file-p (fn)
+  "Return T if FN is a valid old-pipeline test file name.
+   Excludes .sv files and analyze_* files."
+  (and (not (search "." fn))          ; no extension (exclude .sv etc.)
+       (not (eql 0 (search "analyze_" fn))))) ; exclude analyze_* tests
+
 (defun run-tests ()
   (let* ((test-dir (concatenate 'string *verilisp-dir* "tests/"))
          (divider (concatenate 'string
@@ -263,25 +272,28 @@
          (successes 0)
          (failures 0))
     (dolist (test-path (sort test-files #'string< :key #'namestring))
-      (let* ((fn (file-namestring test-path))
-             (content (read-file-to-string test-path))
-             (div-pos (search divider content)))
-        (if (null div-pos)
-            (format t "test ~a is malformed~%" fn)
-            (let ((vl-code (subseq content 0 div-pos))
-                  (expected (subseq content (+ div-pos (length divider)))))
-              (reset-verilisp-state)
-              (let ((actual (with-output-to-string (out)
-                              (translate-code vl-code out))))
-                (if (string= actual expected)
-                    (progn
-                      (format t "Success:~c~a~%" #\Tab fn)
-                      (incf successes))
-                    (progn
-                      (format t "Failure:~c~a~%" #\Tab fn)
-                      (format t "    translate(~s)~%    should equal~%    ~s~%    but was~%    ~s~%"
-                              vl-code expected actual)
-                      (incf failures))))))))
+      (let* ((fn (file-namestring test-path)))
+        (when (old-test-file-p fn)
+          (let* ((content (read-file-to-string test-path))
+                 (div-pos (search divider content)))
+            (if (null div-pos)
+                (progn
+                  (format t "test ~a is malformed~%" fn)
+                  (incf failures))
+                (let ((vl-code (subseq content 0 div-pos))
+                      (expected (subseq content (+ div-pos (length divider)))))
+                  (reset-verilisp-state)
+                  (let ((actual (with-output-to-string (out)
+                                  (translate-code vl-code out))))
+                    (if (string= actual expected)
+                        (progn
+                          (format t "Success:~c~a~%" #\Tab fn)
+                          (incf successes))
+                        (progn
+                          (format t "Failure:~c~a~%" #\Tab fn)
+                          (format t "    translate(~s)~%    should equal~%    ~s~%    but was~%    ~s~%"
+                                  vl-code expected actual)
+                          (incf failures))))))))))
     (format t "~a successes, ~a failures~%" successes failures)
     failures))
 
@@ -299,13 +311,18 @@
 ;;; CLI
 ;;; ============================================================
 
+(defvar *output-target* :verilog)
+(defvar *do-analyze* nil)
+
 (defun main ()
   (let ((args ext:*args*)
         (only-mangle nil)
         (out-dir nil)
         (dep-file nil)
         (next-is-dir nil)
-        (next-is-dep nil))
+        (next-is-dep nil)
+        (*output-target* :verilog)
+        (*do-analyze* nil))
     (if (null args)
         ;; stdin → stdout
         (let ((code (read-stream-to-string *standard-input*)))
@@ -326,20 +343,36 @@
             ((or (string= arg "-h") (string= arg "--help") (string= arg "-H"))
              (format t "Usage: verilisp [OPTIONS] [FILES...]~%")
              (format t "  --mangle       Mangle only (.hvlib output)~%")
+             (format t "  --sv           Output SystemVerilog (.sv)~%")
+             (format t "  --analyze      Run def-use analysis (warnings)~%")
              (format t "  --dir DIR      Output directory~%")
              (format t "  --depfile FILE Generate depfile~%")
-             (format t "  -t             Run tests~%")
+             (format t "  -t             Run old pipeline tests~%")
              (format t "  -tn            Run new AST pipeline tests~%")
+             (format t "  -tsv           Run SystemVerilog tests~%")
+             (format t "  -ta            Run analysis tests~%")
              (format t "  -h / --help    Show this help~%")
              (format t "  (no args)      stdin -> stdout~%"))
             ((string= arg "--mangle")
              (setq only-mangle t))
+            ((string= arg "--sv")
+             (setq *output-target* :sv))
+            ((string= arg "--analyze")
+             (setq *do-analyze* t))
             ((string= arg "-t")
              (let ((failures (run-tests)))
                (when (> failures 0) (ext:exit 1))))
             ((string= arg "-tn")
              (load-ast-pipeline)
              (let ((failures (run-new-tests)))
+               (when (> failures 0) (ext:exit 1))))
+            ((string= arg "-tsv")
+             (load-ast-pipeline)
+             (let ((failures (run-sv-tests)))
+               (when (> failures 0) (ext:exit 1))))
+            ((string= arg "-ta")
+             (load-ast-pipeline)
+             (let ((failures (run-analyze-tests)))
                (when (> failures 0) (ext:exit 1))))
             ((string= arg "--dir")
              (setq next-is-dir t))
@@ -348,26 +381,44 @@
             ((probe-file arg)
              (let* ((in-pathname (pathname arg))
                     (base (pathname-name in-pathname))
-                    (ext (if only-mangle ".hvlib" ".v"))
+                    (ext (cond (only-mangle ".hvlib")
+                               ((eq *output-target* :sv) ".sv")
+                               (t ".v")))
                     (out-name (concatenate 'string base ext))
                     (out-path (if out-dir
                                   (concatenate 'string out-dir "/" out-name)
                                   (concatenate 'string
                                     (directory-namestring in-pathname)
                                     out-name))))
-               (if only-mangle
-                   (let ((code (read-file-to-string arg)))
-                     (with-open-file (out out-path :direction :output
-                                                   :if-exists :supersede)
-                       (write-string (mangle-code code) out)))
-                   (progn
-                     (reset-verilisp-state)
-                     (handler-case
-                       (translate-file arg out-path :dep-file dep-file)
-                       (error (e)
-                         (declare (ignore e))
-                         (when (probe-file out-path)
-                           (delete-file out-path))))))))
+               (cond
+                 (only-mangle
+                  (let ((code (read-file-to-string arg)))
+                    (with-open-file (out out-path :direction :output
+                                                  :if-exists :supersede)
+                      (write-string (mangle-code code) out))))
+                 ((or (eq *output-target* :sv) *do-analyze*)
+                  ;; Use AST pipeline for SV output or analysis
+                  (load-ast-pipeline)
+                  (reset-verilisp-state)
+                  (let ((code (read-file-to-string arg)))
+                    (handler-case
+                      (with-open-file (out out-path :direction :output
+                                                    :if-exists :supersede)
+                        (translate-code-ast code out
+                                            :target *output-target*
+                                            :analyze *do-analyze*))
+                      (error (e)
+                        (declare (ignore e))
+                        (when (probe-file out-path)
+                          (delete-file out-path))))))
+                 (t
+                  (reset-verilisp-state)
+                  (handler-case
+                    (translate-file arg out-path :dep-file dep-file)
+                    (error (e)
+                      (declare (ignore e))
+                      (when (probe-file out-path)
+                        (delete-file out-path))))))))
             (t
              (format *error-output* "File not found: ~a~%" arg)))))))
 
