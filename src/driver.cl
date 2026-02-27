@@ -91,7 +91,8 @@
          ;; Eval to collect AST
          (raw-ast (let ((*in-module* nil)
                         (*current-module-contents* nil)
-                        (*ast-toplevel-nodes* (list :sentinel)))
+                        (*ast-toplevel-nodes* (list :sentinel))
+                        (*__name__* :__main__))
                     (eval ast-form)))
          ;; Post-process: extract directives, wrap bare stmts
          (top-nodes (wrap-top-level raw-ast)))
