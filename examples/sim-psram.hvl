@@ -49,47 +49,47 @@
        (always ((posedge clk))
          (case status
            (0
-             (<=# init_calib_r 1)
-             (<=# status 1)
-             (<=# read_counter 0)
-             (<=# rd_data_valid_r 0))
+             (<- init_calib_r 1)
+             (<- status 1)
+             (<- read_counter 0)
+             (<- rd_data_valid_r 0))
 
            (1
-             (<=# addr_r addr_i);
+             (<- addr_r addr_i);
 
              (if cmd_en_i
                 (if (== cmd_i 0)
-                  (<=# status 2)
-                  (<=# status #b10000))))
+                  (<- status 2)
+                  (<- status #b10000))))
 
            ; read wait because of busy
            (2
              (if (== read_counter 0)
                (progn
-                (<=# read_counter ,(l_- read-latency 3))
-                (<=# status 3))
-               (<=# read_counter (- read_counter 1))))
+                (<- read_counter ,(l_- read-latency 3))
+                (<- status 3))
+               (<- read_counter (- read_counter 1))))
 
            ; read latency
            (3
              (if (== read_counter 0)
                 (progn
-                 (<=# rd_data_valid_r 1)
-                 (<=# rd_data_r addr_r)
-                 (<=# read_counter ,(l_- beat-n 1))
-                 (<=# status 4))
-                (<=# read_counter (- read_counter 1))))
+                 (<- rd_data_valid_r 1)
+                 (<- rd_data_r addr_r)
+                 (<- read_counter ,(l_- beat-n 1))
+                 (<- status 4))
+                (<- read_counter (- read_counter 1))))
 
            ; output read data
            (4
              (if (== read_counter 0)
                 (progn
-                 (<=# rd_data_valid_r 0)
-                 (<=# read_counter ,(l_- read-post-wait-n 1))
-                 (<=# status 1))
+                 (<- rd_data_valid_r 0)
+                 (<- read_counter ,(l_- read-post-wait-n 1))
+                 (<- status 1))
                 (progn
-                 (<=# read_counter (- read_counter 1))
-                 (<=# rd_data_r (+ rd_data_r 1)))))
+                 (<- read_counter (- read_counter 1))
+                 (<- rd_data_r (+ rd_data_r 1)))))
 
            ; write
            (#b10000

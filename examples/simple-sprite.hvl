@@ -83,11 +83,11 @@
          (cond 
            (req_cache_valid
              (progn
-               (<=# cache_is_valid 1)
-               (<=# cache_start_addr req_cache_start_addr)
-               (<=# cache_end_addr (+ req_cache_start_addr ,end-ram-offset-addr))))
+               (<- cache_is_valid 1)
+               (<- cache_start_addr req_cache_start_addr)
+               (<- cache_end_addr (+ req_cache_start_addr ,end-ram-offset-addr))))
            (req_delete_cache_valid
-             (<=# cache_is_valid 0))))
+             (<- cache_is_valid 0))))
 
        ;----------------------------------------------------------------
        (reg= read_req_ready_r 0)
@@ -118,68 +118,68 @@
        (always ((posedge clk))
          (case status
            (#b00000
-             (<=# read_req_ready_r 1)
-             (<=# status #b00001))
+             (<- read_req_ready_r 1)
+             (<- status #b00001))
            (#b00001
              (if read_req_valid
                (progn
-                 (<=# read_req_ready_r 0)
-                 (<=# req_read_addr_r read_addr)
+                 (<- read_req_ready_r 0)
+                 (<- req_read_addr_r read_addr)
                  (if cache_is_valid
-                   (<=# status #b00011)
-                   (<=# status #b10000)))))
+                   (<- status #b00011)
+                   (<- status #b10000)))))
 
            (#b00011
              (cond
                ((== req_read_addr_r cache_start_addr)
-                 (<=# status #b00010))
+                 (<- status #b00010))
                ((== req_read_addr_r iter_addr_r)
-                 (<=# status #b00110))
+                 (<- status #b00110))
                (else
-                 (<=# status #b10000))))
+                 (<- status #b10000))))
 
            (#b00010
-             (<=# iter_addr_r cache_start_addr)
-             (<=# status #b00110))
+             (<- iter_addr_r cache_start_addr)
+             (<- status #b00110))
 
            (#b00110
-             (<=# beat_count ,(l_- beat-n 1))
+             (<- beat_count ,(l_- beat-n 1))
              (if (! (== iter_addr_r cache_end_addr))
-               (<=# iter_addr_r (+ iter_addr_r ,ram-stride))
-               (<=# iter_addr_r (cat* ,*RAM-ADDR-WIDTH* (cat (b 1 x)))))
-             (<=# ram_data_enable_r 1)
-             (<=# status #b00111))
+               (<- iter_addr_r (+ iter_addr_r ,ram-stride))
+               (<- iter_addr_r (cat* ,*RAM-ADDR-WIDTH* (cat (b 1 x)))))
+             (<- ram_data_enable_r 1)
+             (<- status #b00111))
 
            (#b00111
              (if (== beat_count (d ,beat-count-width 0))
                (progn
-                 (<=# ram_data_enable_r 0)
-                 (<=# status #b00101)))
-             (<=# beat_count (- beat_count 1)))
+                 (<- ram_data_enable_r 0)
+                 (<- status #b00101)))
+             (<- beat_count (- beat_count 1)))
 
            (#b00101
-              (<=# status #b00000))
+              (<- status #b00000))
 
            (#b10000
-             (<=# read_access_req_valid_r 1)
-             (<=# status #b10001))
+             (<- read_access_req_valid_r 1)
+             (<- status #b10001))
 
            (#b10001
              (if read_access_req_ready 
                (progn
-                 (<=# read_access_req_valid_r 0)
-                 (<=# status #b10011))))
+                 (<- read_access_req_valid_r 0)
+                 (<- status #b10011))))
 
            (#b10011
              (if read_access_data_enable
-               (<=# status #b10010)))
+               (<- status #b10010)))
 
            (#b10010
              (if (== read_access_data_enable 0)
-              (<=# status #b10110)))
+              (<- status #b10110)))
 
            (#b10110
-             (<=# status #b00000)))))))
+             (<- status #b00000)))))))
 
 (show-module-if 'make-simple-sprite-module)
 

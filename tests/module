@@ -28,7 +28,7 @@
  (reg (3 HD_valid_r))
  (reg HD_valid)
  (always ((posedge clk))
-    (n= HD_valid_r (cat (ref HD_valid_r 1 0) HD_valid))))
+    (<- HD_valid_r (cat (ref HD_valid_r 1 0) HD_valid))))
 
 ================================================================================
 

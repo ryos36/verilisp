@@ -143,127 +143,127 @@
                 ((& io_wr cache_mem_access)
                    (case (ref io_mem_addr 1 0)
                      ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i)) (incf i)
-                       `(,old-i (<=# (ref ,(symcat 'cache_mem old-i) (& (ref io_mem_addr ,(l_- cache-data-width 1) 2) ,(l_- cache-data-size-by-ram 1))) io_wr_data ))))
+                       `(,old-i (<- (ref ,(symcat 'cache_mem old-i) (& (ref io_mem_addr ,(l_- cache-data-width 1) 2) ,(l_- cache-data-size-by-ram 1))) io_wr_data ))))
                            (make-list cache-data-n)))))
                 ((& io_rd cache_mem_access)
                  (display "io_rd," io_rd "," cache_mem_access "," io_mem_addr)
                    (case (ref io_mem_addr 1 0)
                     ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i)) (incf i)
-                       `(,old-i (<=# io_rd_data_r (ref ,(symcat 'cache_mem old-i) (& (ref io_mem_addr ,(l_- cache-data-width 1) 2) ,(l_- cache-data-size-by-ram 1)))))))
+                       `(,old-i (<- io_rd_data_r (ref ,(symcat 'cache_mem old-i) (& (ref io_mem_addr ,(l_- cache-data-width 1) 2) ,(l_- cache-data-size-by-ram 1)))))))
                           (make-list cache-data-n)))))
 
                 (processing
                   (if now_writing_r
-                    (<=# status #b10000)
-                    (<=# status #b00001)))
+                    (<- status #b10000)
+                    (<- status #b00001)))
                   
                 (req_delete_start_addr_valid
-                  (<=# read_start_addr_is_valid 0)
-                  (<=# req_delete_start_addr_ready_r 1)
-                  (<=# status #b01111))
+                  (<- read_start_addr_is_valid 0)
+                  (<- req_delete_start_addr_ready_r 1)
+                  (<- status #b01111))
 
                 (req_read_from_ram_valid
-                  (<=# now_writing_r 0)
-                  (<=# read_start_addr_is_valid 1)
-                  (<=# req_read_from_ram_ready_r 1)
-                  (<=# read_start_addr_r req_read_start_addr)
-                  (<=# iter_addr_r req_read_start_addr)
-                  (<=# iter_vcache_line_r req_read_update_vcache_line)
-                  (<=# vcount ,(l_- vcache-height 1))
-                  (<=# status #b00001))
+                  (<- now_writing_r 0)
+                  (<- read_start_addr_is_valid 1)
+                  (<- req_read_from_ram_ready_r 1)
+                  (<- read_start_addr_r req_read_start_addr)
+                  (<- iter_addr_r req_read_start_addr)
+                  (<- iter_vcache_line_r req_read_update_vcache_line)
+                  (<- vcount ,(l_- vcache-height 1))
+                  (<- status #b00001))
 
                 (req_write_into_ram_valid
-                  (<=# now_writing_r 1)
-                  (<=# req_write_into_ram_ready_r 1)
-                  (<=# iter_addr_r read_start_addr_r)
-                  (<=# iter_vcache_line_r req_write_flush_vcache_line)
-                  (<=# vcount ,(l_- vcache-height 1))
-                  (<=# status #b10000))))
+                  (<- now_writing_r 1)
+                  (<- req_write_into_ram_ready_r 1)
+                  (<- iter_addr_r read_start_addr_r)
+                  (<- iter_vcache_line_r req_write_flush_vcache_line)
+                  (<- vcount ,(l_- vcache-height 1))
+                  (<- status #b10000))))
 
             (#b00001
-              (<=# req_read_from_ram_ready_r 0)
+              (<- req_read_from_ram_ready_r 0)
               (if (ref iter_vcache_line_r 0)
                 (progn
-                  (<=# read_req_valid_r 1)
-                  (<=# status #b00011))
-                (<=# status #b01110)))
+                  (<- read_req_valid_r 1)
+                  (<- status #b00011))
+                (<- status #b01110)))
 
             (#b00011
               (if read_req_ready 
                 (progn
-                  (<=# beat_count (b ,beat-n-bit-width ,(l_- beat-n 1)))
-                  (<=# read_req_valid_r 0)
-                  (<=# status #b00010))))
+                  (<- beat_count (b ,beat-n-bit-width ,(l_- beat-n 1)))
+                  (<- read_req_valid_r 0)
+                  (<- status #b00010))))
 
             (#b00010
               (if read_data_enable   
                 (progn
                   ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i) (i16 (l_* i 16)) (i16+15 (l_+ i16 15))) (incf i)
-                      `(<=# (ref ,(symcat 'cache_mem old-i) vcache_addr_w) (ref read_data ,i16+15 ,i16))))
+                      `(<- (ref ,(symcat 'cache_mem old-i) vcache_addr_w) (ref read_data ,i16+15 ,i16))))
                           (make-list cache-data-n)))
-                  (<=# beat_count (- beat_count 1))
-                  (<=# status #b00110))))
+                  (<- beat_count (- beat_count 1))
+                  (<- status #b00110))))
 
             (#b00110
               (if (== beat_count 0)
                 (progn
-                  (<=# status #b01110)))
+                  (<- status #b01110)))
               ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i) (i16 (l_* i 16)) (i16+15 (l_+ i16 15))) (incf i)
-                  `(<=# (ref ,(symcat 'cache_mem old-i) vcache_addr_w) (ref read_data ,i16+15 ,i16))))
+                  `(<- (ref ,(symcat 'cache_mem old-i) vcache_addr_w) (ref read_data ,i16+15 ,i16))))
                                      (make-list cache-data-n)))
-              (<=# beat_count (- beat_count 1)))
+              (<- beat_count (- beat_count 1)))
 
 
             (#b01110
-              (<=# status #b00000)
-              (<=# iter_addr_r 
+              (<- status #b00000)
+              (<- iter_addr_r 
                (+ iter_addr_r ,vram-line-stride))
-              (<=# iter_vcache_line_r (cat (b 1 0) (ref iter_vcache_line_r ,(l_- vcache-height 1) 1)))
-              (<=# vcount (- vcount 1)))
+              (<- iter_vcache_line_r (cat (b 1 0) (ref iter_vcache_line_r ,(l_- vcache-height 1) 1)))
+              (<- vcount (- vcount 1)))
 
             (#b01111
-              (<=# req_delete_start_addr_ready_r 0)
-              (<=# status #b00000))
+              (<- req_delete_start_addr_ready_r 0)
+              (<- status #b00000))
 
             (#b10000
-              (<=# req_write_into_ram_ready_r 0)
+              (<- req_write_into_ram_ready_r 0)
               (cond 
                 ((== read_start_addr_is_valid 0)
-                   (<=# status #b00000))
+                   (<- status #b00000))
                 ((ref iter_vcache_line_r 0)
-                   (<=# write_req_valid_r 1)
-                   (<=# beat_count (b ,beat-n-bit-width ,(l_- beat-n 1)))
-                   (<=# status #b10001))
+                   (<- write_req_valid_r 1)
+                   (<- beat_count (b ,beat-n-bit-width ,(l_- beat-n 1)))
+                   (<- status #b10001))
                 (else
-                  (<=# status #b10011))))
+                  (<- status #b10011))))
 
             (#b10001
               (if write_req_ready 
                 (progn
-                  (<=# write_req_valid_r 0)
-                  (<=# write_data_enable_r 1)
+                  (<- write_req_valid_r 0)
+                  (<- write_data_enable_r 1)
                   ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i) (i16 (l_* i 16)) (i16+15 (l_+ i16 15))) (incf i)
-                  `(<=# (ref write_data_r ,i16+15 ,i16) (ref ,(symcat 'cache_mem old-i) vcache_addr_w))))
+                  `(<- (ref write_data_r ,i16+15 ,i16) (ref ,(symcat 'cache_mem old-i) vcache_addr_w))))
                                          (make-list cache-data-n)))
-                  (<=# status #b10010))))
+                  (<- status #b10010))))
 
             (#b10010
               (if (== beat_count 0)
                 (progn
-                  (<=# write_data_enable_r 0)
-                  (<=# status #b10011)))
+                  (<- write_data_enable_r 0)
+                  (<- status #b10011)))
 
               ,@(let ((i 0)) (mapcar #'(lambda (x) (let* ((old-i i) (i16 (l_* i 16)) (i16+15 (l_+ i16 15))) (incf i)
-                  `(<=# (ref write_data_r ,i16+15 ,i16) (ref ,(symcat 'cache_mem old-i) vcache_addr_w))))
+                  `(<- (ref write_data_r ,i16+15 ,i16) (ref ,(symcat 'cache_mem old-i) vcache_addr_w))))
                                          (make-list cache-data-n)))
-              (<=# beat_count (- beat_count 1)))
+              (<- beat_count (- beat_count 1)))
 
             (#b10011
-              (<=# status #b00000)
-              (<=# iter_addr_r 
+              (<- status #b00000)
+              (<- iter_addr_r 
                (+ iter_addr_r ,vram-line-stride))
-              (<=# iter_vcache_line_r (cat (b 1 0) (ref iter_vcache_line_r ,(l_- vcache-height 1) 1)))
-              (<=# vcount (- vcount 1))))))))
+              (<- iter_vcache_line_r (cat (b 1 0) (ref iter_vcache_line_r ,(l_- vcache-height 1) 1)))
+              (<- vcount (- vcount 1))))))))
 
 (show-module-if 'make-vcache-module)
 ;(show-module-reg 'make-vcache-module 'cache_mem)

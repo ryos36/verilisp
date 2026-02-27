@@ -46,12 +46,12 @@
 (defparameter *names-to-mangle*
   '(;; special forms
     "progn"
-    "@" "fork" "release" "assign" "deassign" "task" "function" "=" "n="
+    "@" "fork" "release" "assign" "deassign" "task" "function" "="
     "delay" "#" "wait" "if" "module" "always" "initial" "cat" "cat*" "."
     "primitive" "table" "for" "fromto" "forallbits" "ref" "comment"
     "b" "d" "h" "o"
 
-    "<=#"
+    "<-"
 
     ;; cases
     "case" "cond" "casex" "casez"

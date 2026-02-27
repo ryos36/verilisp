@@ -106,89 +106,89 @@
                   (if init_calib_i
                     (cond
                       (read_req_valid
-                        (<=# read_req_ready_r 1)
-                        (<=# psram_addr_r read_addr)
-                        (<=# psram_cmd_r 0)
-                        (<=# psram_cmd_en_r 1)
-                        (<=# psman_status #b00001))
+                        (<- read_req_ready_r 1)
+                        (<- psram_addr_r read_addr)
+                        (<- psram_cmd_r 0)
+                        (<- psram_cmd_en_r 1)
+                        (<- psman_status #b00001))
 
                       (write_req_valid
-                        (<=# write_req_ready_r 1)
-                        (<=# psram_addr_r write_addr)
-                        (<=# psram_cmd_r 1)
-                        (<=# psram_cmd_en_r 1)
-                        (<=# psman_status #b10000)))))
+                        (<- write_req_ready_r 1)
+                        (<- psram_addr_r write_addr)
+                        (<- psram_cmd_r 1)
+                        (<- psram_cmd_en_r 1)
+                        (<- psman_status #b10000)))))
 
                 ;--------------------------------
                 ; Start Read REQ
                 ; Wait Read Data
                 (#b00001
-                  (<=# read_req_ready_r 0)
-                  (<=# psram_cmd_en_r 0)
-                  (<=# beat_counter ,(l_- beat-n 1))
+                  (<- read_req_ready_r 0)
+                  (<- psram_cmd_en_r 0)
+                  (<- beat_counter ,(l_- beat-n 1))
                   (if (== rd_data_valid_i #b1)
                     (progn
-                      (<=# read_data_enable_r 1)
-                      (<=# read_data_r rd_data_i)
-                      (<=# beat_counter (- beat_counter 1))
-                      (<=# psman_status #b00011))))
+                      (<- read_data_enable_r 1)
+                      (<- read_data_r rd_data_i)
+                      (<- beat_counter (- beat_counter 1))
+                      (<- psman_status #b00011))))
 
                 ; Read Data as Burst
                 (#b00011
-                  (<=# read_data_enable_r 1)
-                  (<=# read_data_r rd_data_i)
+                  (<- read_data_enable_r 1)
+                  (<- read_data_r rd_data_i)
 
                   (if (== rd_data_valid_i 0)
                      (progn
-                       (<=# rd_error_r 1)
-                       (<=# debug_error_n (+ debug_error_n 1))))
+                       (<- rd_error_r 1)
+                       (<- debug_error_n (+ debug_error_n 1))))
 
                   (if (== beat_counter 0)
-                    (<=# psman_status #b00010)
-                    (<=# beat_counter (- beat_counter 1))))
+                    (<- psman_status #b00010)
+                    (<- beat_counter (- beat_counter 1))))
 
                 ; Read Done 
                 (#b00010
-                  (<=# read_data_r (cat* ,data-width (cat (b 1 x))))
-                  (<=# read_data_enable_r 0)
-                  (<=# psman_status #b00000))
+                  (<- read_data_r (cat* ,data-width (cat (b 1 x))))
+                  (<- read_data_enable_r 0)
+                  (<- psman_status #b00000))
 
                 ;--------------------------------
                 ; Start Write REQ
                 (#b10000
-                  (<=# write_req_ready_r 0)
-                  (<=# psram_cmd_en_r 0)
-                  (<=# data_mask_r (cat* ,data-mask-width (cat (b 1 0))))
+                  (<- write_req_ready_r 0)
+                  (<- psram_cmd_en_r 0)
+                  (<- data_mask_r (cat* ,data-mask-width (cat (b 1 0))))
                              ; 1 means avoiding to write
-                  (<=# beat_counter ,(l_- beat-n 1))
-                  (<=# psman_status #b10001))
+                  (<- beat_counter ,(l_- beat-n 1))
+                  (<- psman_status #b10001))
 
                 ; Write Data as Burst
                 (#b10001
                   (if (== write_data_enable 0)
                     (progn
-                      (<=# wr_error_r 1)
-                      (<=# debug_error_n (+ debug_error_n 1))))
+                      (<- wr_error_r 1)
+                      (<- debug_error_n (+ debug_error_n 1))))
 
                   (if (== beat_counter 0)
-                    (<=# psman_status #b10011))
-                    (<=# beat_counter (- beat_counter 1)))
+                    (<- psman_status #b10011))
+                    (<- beat_counter (- beat_counter 1)))
 
                 ; Write Done 
                 (#b10011
-                  (<=# beat_counter ,*WRITE-WAIT*)
-                  (<=# psman_status #b10010))
+                  (<- beat_counter ,*WRITE-WAIT*)
+                  (<- psman_status #b10010))
 
                 ; Wait write complete
                 (#b10010
                   (if (== beat_counter 0)
-                    (<=# psman_status #b00000))
-                  (<=# beat_counter (- beat_counter 1)))
+                    (<- psman_status #b00000))
+                  (<- beat_counter (- beat_counter 1)))
 
                 ;--------------------------------
                 (default
                     ; nothing to do
-                    (<=# psman_status psman_status)))))))
+                    (<- psman_status psman_status)))))))
 
 (defmacro make-psdma-read-test-module (module-name &optional (read-sym 'read_) (beat-n 32) (data-width *DATA_WIDTH*) (addr-width *ADDR_WIDTH*))
   (let ((beat-n-bit-width (floor (l_log beat-n) (l_log 2.0))))
@@ -210,35 +210,35 @@
        (always ((posedge clk))
          (case status
            (#b000
-             (<=# read_req_ready_r 1)
-             (<=# status #b001))
+             (<- read_req_ready_r 1)
+             (<- status #b001))
            (#b001
              (if read_req_valid
                (progn
-                 (<=# read_req_ready_r 0)
-                 (<=# status #b011))))
+                 (<- read_req_ready_r 0)
+                 (<- status #b011))))
            (#b011
-             (<=# read_data_enable_r 1)
-             (<=# read_data_r (d 64 #x1234567890abcdef))
-             (<=# count ,(l_- beat-n 1))
-             (<=# status #b010))
+             (<- read_data_enable_r 1)
+             (<- read_data_r (d 64 #x1234567890abcdef))
+             (<- count ,(l_- beat-n 1))
+             (<- status #b010))
            (#b010
-             (<=# read_data_r (+ read_data_r 1))
+             (<- read_data_r (+ read_data_r 1))
              (if (== count 0)
                (progn
-                 (<=# read_data_enable_r 0)
-                 (<=# read_data_r (cat* 64 (cat (b 1 x))))
-                 (<=# status #b110)))
-             (<=# count (- count 1)))
+                 (<- read_data_enable_r 0)
+                 (<- read_data_r (cat* 64 (cat (b 1 x))))
+                 (<- status #b110)))
+             (<- count (- count 1)))
            (#b110
-             (<=# count 31)
-             (<=# status #b111))
+             (<- count 31)
+             (<- status #b111))
            (#b111
              (if (== count 0)
-               (<=# status #b101))
-             (<=# count (- count 1)))
+               (<- status #b101))
+             (<- count (- count 1)))
            (#b101
-             (<=# status #b000)))))))
+             (<- status #b000)))))))
 
 ;----------------------------------------------------------------
 (when (eq *__name__* :__main__)

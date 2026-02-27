@@ -2,7 +2,7 @@
 (make-prologue)
 
 (defmacro inc (sym)
-    `(<=# ,sym (+ ,sym 1)))
+    `(<- ,sym (+ ,sym 1)))
 
 (defmacro dolist-num (array-name lst)
  `(let ((i 0) rv)
@@ -48,12 +48,12 @@
       (always ((posedge clk))
         (case status
             (0
-                (<=# hcount 0)
-                (<=# vcount 0)
-                (<=# status 1))
+                (<- hcount 0)
+                (<- vcount 0)
+                (<- status 1))
 
             (1
-                (<=# status 2))
+                (<- status 2))
 
             (2
                 (if (== hcount (- cur_h_list 1))
@@ -64,13 +64,13 @@
                       (progn
                        (display cur_v_state)
                        (inc cur_v_state)
-                       (<=# vcount 0))
+                       (<- vcount 0))
 
                       (inc vcount))))
 
                    (inc cur_h_state)
-                   ;(<=# status 3)
-                   (<=# hcount 0))
+                   ;(<- status 3)
+                   (<- hcount 0))
                   (inc hcount)))
 
             (default 

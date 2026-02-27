@@ -26,7 +26,7 @@
 
       (reg= busy 0)
       (always ((posedge clk))
-        (<=# busy psdma_busy))
+        (<- busy psdma_busy))
 
       (reg= (,req-n sel) (d ,req-n 0))
       (wire sel_busy)
@@ -70,32 +70,32 @@
         (case status
           (#b000
             (if (| read0_req_valid read1_req_valid write0_req_valid)
-              (<=# status #b001))
+              (<- status #b001))
             (cond
               (read0_req_valid
-                (<=# (ref sel 0) 1))
+                (<- (ref sel 0) 1))
 
               (read1_req_valid
-                (<=# (ref sel 1) 1))
+                (<- (ref sel 1) 1))
 
               (write0_req_valid
-                (<=# (ref sel 2) 1))))
+                (<- (ref sel 2) 1))))
 
           ; Wait Busy
           (#b001 
-            (<=# wait_busy 1)
+            (<- wait_busy 1)
             (if busy
-              (<=# status #b011)))
+              (<- status #b011)))
 
           ; Busy
           (#b011
-            (<=# wait_busy 0)
+            (<- wait_busy 0)
             (if (! busy)
-              (<=# status #b010)))
+              (<- status #b010)))
 
           (#b010
-            (<=# sel (d ,req-n 0))
-            (<=# status #b000))))
+            (<- sel (d ,req-n 0))
+            (<- status #b000))))
       )))
 
 ;(print `(:range ,(foreach i (range 3) `(:i, i))) *error-output*)
@@ -155,76 +155,76 @@
        (reg= wr_error 0)
 
        (always ((posedge clk))
-         (<=# psdma_busy_r (| (| rstatus) (| wstatus))))
+         (<- psdma_busy_r (| (| rstatus) (| wstatus))))
 
        (always ((posedge clk))
          (case rstatus
             (#b000
-              (<=# read_req_ready_r 0)
-              (<=# read_data_enable_r 0)
+              (<- read_req_ready_r 0)
+              (<- read_data_enable_r 0)
               (if (& (== read_req_valid_w 1) (== wstatus #b000))
-                (<=# rstatus #b010)))
+                (<- rstatus #b010)))
             (#b010
               (let ((*transport-delay* 3))
-                (<=# read_req_ready_r 1))
-              (<=# rstatus #b011))
+                (<- read_req_ready_r 1))
+              (<- rstatus #b011))
             (#b011
               (let ((*transport-delay* 7))
-                (<=# read_req_ready_r 0))
-              (<=# rcount 19)
-              (<=# rstatus #b111))
+                (<- read_req_ready_r 0))
+              (<- rcount 19)
+              (<- rstatus #b111))
             (#b111
               (if (== rcount 0)
-                (<=# rstatus #b110))
-              (<=# rcount (- rcount 1)))
+                (<- rstatus #b110))
+              (<- rcount (- rcount 1)))
             (#b110
-              (<=# read_data_enable_r 1)
-              (<=# read_data_r (d 64 #x1234567890abcdef))
-              (<=# rcount 31)
-              (<=# rstatus #b100))
+              (<- read_data_enable_r 1)
+              (<- read_data_r (d 64 #x1234567890abcdef))
+              (<- rcount 31)
+              (<- rstatus #b100))
             (#b100
               (if (== rcount 0)
                 (progn
-                  (<=# read_data_enable_r 0)
-                  (<=# rstatus #b101)))
-              (<=# read_data_r (+ read_data_r 1))
-              (<=# rcount (- rcount 1)))
+                  (<- read_data_enable_r 0)
+                  (<- rstatus #b101)))
+              (<- read_data_r (+ read_data_r 1))
+              (<- rcount (- rcount 1)))
             (#b101
-              (<=# read_data_r (cat* 64 (cat (b 1 x))))
-              (<=# rstatus #b000))))
+              (<- read_data_r (cat* 64 (cat (b 1 x))))
+              (<- rstatus #b000))))
 
        (always ((posedge clk))
          (case wstatus
             (#b000
-              (<=# write_req_ready_r 0)
+              (<- write_req_ready_r 0)
               (if (& (== write_req_valid_w 1) (== read_req_valid_w 0) (== rstatus #b000))
-                (<=# wstatus #b010)))
+                (<- wstatus #b010)))
             (#b010
               (let ((*transport-delay* 3))
-                (<=# write_req_ready_r 1))
-              (<=# wstatus #b011))
+                (<- write_req_ready_r 1))
+              (<- wstatus #b011))
             (#b011
               (let ((*transport-delay* 7))
-                (<=# write_req_ready_r 0))
-              (<=# wcount 31)
-              (<=# wstatus #b111))
+                (<- write_req_ready_r 0))
+              (<- wcount 31)
+              (<- wstatus #b111))
             (#b111
               (if (== write_data_enable_w 0)
-                (<=# wr_error 1))
+                (<- wr_error 1))
               (if (== wcount 0)
-                (<=# wstatus #b110))
-              (<=# wcount (- wcount 1)))
+                (<- wstatus #b110))
+              (<- wcount (- wcount 1)))
             (#b110
               (if (== write_data_enable_w 1)
-                (<=# wr_error 1))
-              (<=# wcount 31)
-              (<=# wstatus #b100))
+                (<- wr_error 1))
+              (<- wcount 31)
+              (<- wstatus #b100))
             (#b100
               (if (== wcount 0)
-                (<=# wstatus #b101))
-              (<=# wcount (- wcount 1)))
+                (<- wstatus #b101))
+              (<- wcount (- wcount 1)))
             (#b101
-              (<=# wstatus #b000))))
+              (<- wstatus #b000))))
       
        (initial
          (dumpfile "vcd/req-selector.vcd")

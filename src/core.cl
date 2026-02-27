@@ -177,16 +177,10 @@
       `(list := ',name (ast-eval ',wait-or-value) (ast-eval ',value-or-nil))
       `(list := ',name (ast-eval ',wait-or-value))))
 
-(defmacro v_n= (name wait-or-value &optional value-or-nil nononli)
-  (declare (ignore nononli))
-  (if value-or-nil
-      `(list :<= ',name (ast-eval ',wait-or-value) (ast-eval ',value-or-nil))
-      `(list :<= ',name (ast-eval ',wait-or-value))))
-
-(defmacro v_<=# (lvalue expr &optional
-                        (transport-delay *transport-delay*)
-                        (inertial-delay *inertial-delay*))
-  `(list :<=# ',lvalue (ast-eval ',expr) ,transport-delay ,inertial-delay))
+(defmacro v_<- (lvalue expr &key
+                       (delay *transport-delay*)
+                       (inertial-delay *inertial-delay*))
+  `(list :<=# ',lvalue (ast-eval ',expr) ,delay ,inertial-delay))
 
 ;;; Compound assignments (+=, -= etc.)
 (foreach name-symbol '(

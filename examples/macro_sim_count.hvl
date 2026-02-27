@@ -10,12 +10,12 @@
       (reg debug_v_d)
 
       (always ((posedge clk))
-        (<=# debug_v_d debug_v)
+        (<- debug_v_d debug_v)
         (if (!= debug_v debug_v_d)
           (progn
            (v_if (v_~ ,sup) 
             (display "%t:%s %d %d" (time) ,name debug_v_d (+ count 1)))
-           (<=# count 0))
+           (<- count 0))
           (++ count)))))
 
 (make_sim_count sim_count "test0")

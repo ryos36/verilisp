@@ -1340,16 +1340,16 @@
     (write-string ";")
 )
 
-(defmacro v_<=# (lvalue expr &optional 
-                       (transport-delay *transport-delay*)
+(defmacro v_<- (lvalue expr &key
+                       (delay *transport-delay*)
                        (inertial-delay *inertial-delay*))
     (nli)
-    (if inertial-delay 
+    (if inertial-delay
       (format t "#~a " inertial-delay))
     (write-or-eval lvalue)
     (write-string " <= ")
-    (if transport-delay 
-      (format t "#~a " transport-delay))
+    (if delay
+      (format t "#~a " delay))
     (write-or-eval expr)
     (write-string ";")
 )
@@ -2018,8 +2018,8 @@
 )
 
 (foreach* (
-        (name '(= n=))
-        (symbol '(" = " " <= "))
+        (name '(=))
+        (symbol '(" = "))
     )
     (eval
         `(defmacro ,(mangle name) (name wait-or-value &optional value-or-nil nononli)

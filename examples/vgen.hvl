@@ -51,7 +51,7 @@
        (reg vsync_r)
 
        (always ((posedge clk))
-         (<=# vsync_r vsync))
+         (<- vsync_r vsync))
 
        (reg= (4 status) 0)
        (reg (,ram-addr-width ram_addr))
@@ -75,93 +75,93 @@
        (reg henable_d)
 
        (always ((posedge clk))
-         (<=# read_tdata_r read_data)
-         (<=# read_tvalid_r read_data_enable)
-         (<=# henable_d henable)
+         (<- read_tdata_r read_data)
+         (<- read_tvalid_r read_data_enable)
+         (<- henable_d henable)
 
          (case status
            (#b0000
-            (<=# read_tuser_r 1)
-            (<=# ram_addr ,ram-addr)
-            (<=# vcount ,(l_- look-ahead-n 1))
+            (<- read_tuser_r 1)
+            (<- ram_addr ,ram-addr)
+            (<- vcount ,(l_- look-ahead-n 1))
 
             (if (& (== vsync_r 0) (== vsync 1))
-              (<=# status #b0001)))
+              (<- status #b0001)))
 
            (#b0001
-             (<=# iter_addr ram_addr)
-             (<=# hcount ,(l_- hcount-max 1))
-             (<=# status #b0011))
+             (<- iter_addr ram_addr)
+             (<- hcount ,(l_- hcount-max 1))
+             (<- status #b0011))
 
            (#b0011
-             (<=# read_req_valid_r 1)
-             (<=# status #b0010))
+             (<- read_req_valid_r 1)
+             (<- status #b0010))
 
            (#b0010
              (if (== read_req_ready 1)
                (progn
-                 (<=# read_req_valid_r 0)
-                 (<=# iter_addr (+ iter_addr ,delta_addr))
-                 (<=# status #b0110))))
+                 (<- read_req_valid_r 0)
+                 (<- iter_addr (+ iter_addr ,delta_addr))
+                 (<- status #b0110))))
 
            (#b0110
              (if (== read_data_enable 1)
-               (<=# status #b0111)))
+               (<- status #b0111)))
 
            (#b0111
-             (<=# read_tuser_r 0)
+             (<- read_tuser_r 0)
              (if (== read_data_enable 0)
-                 (<=# status #b0101)))
+                 (<- status #b0101)))
 
            (#b0101
              (if (== hcount 0)
                 (progn
                   (if (== vcount 0)
-                    (<=# status #b0100)
-                    (<=# status #b0001))
-                  (<=# ram_addr (+ ram_addr ,ram-stride))
-                  (<=# vcount (- vcount 1)))
-                (<=# status #b0011))
-             (<=# hcount (- hcount 1)))
+                    (<- status #b0100)
+                    (<- status #b0001))
+                  (<- ram_addr (+ ram_addr ,ram-stride))
+                  (<- vcount (- vcount 1)))
+                (<- status #b0011))
+             (<- hcount (- hcount 1)))
 
            (#b0100
-             (<=# vcount ,(l_- screen-height look-ahead-n 1))
-             (<=# status #b1100))
+             (<- vcount ,(l_- screen-height look-ahead-n 1))
+             (<- status #b1100))
              
            (#b1100
-             (<=# hcount ,(l_- hcount-max 1))
+             (<- hcount ,(l_- hcount-max 1))
              (if (& (== henable_d 1) (== henable 0)) 
-               (<=# status #b1110)))
+               (<- status #b1110)))
 
            (#b1110
-             (<=# read_req_valid_r 1)
-             (<=# status #b1111))
+             (<- read_req_valid_r 1)
+             (<- status #b1111))
 
            (#b1111
              (if (== read_req_ready 1)
                (progn
-                 (<=# read_req_valid_r 0)
-                 (<=# iter_addr (+ iter_addr ,delta_addr))
-                 (<=# status #b1101))))
+                 (<- read_req_valid_r 0)
+                 (<- iter_addr (+ iter_addr ,delta_addr))
+                 (<- status #b1101))))
 
            (#b1101
              (if (== read_data_enable 1)
-               (<=# status #b1001)))
+               (<- status #b1001)))
 
            (#b1001
              (if (== read_data_enable 0)
-                 (<=# status #b1000)))
+                 (<- status #b1000)))
 
            (#b1000
              (if (== hcount 0)
                 (progn
                   (if (== vcount 0)
-                    (<=# status #b0000)
-                    (<=# status #b1100))
-                  (<=# ram_addr (+ ram_addr ,ram-stride))
-                  (<=# vcount (- vcount 1)))
-                (<=# status #b1110))
-             (<=# hcount (- hcount 1))))))))
+                    (<- status #b0000)
+                    (<- status #b1100))
+                  (<- ram_addr (+ ram_addr ,ram-stride))
+                  (<- vcount (- vcount 1)))
+                (<- status #b1110))
+             (<- hcount (- hcount 1))))))))
 
 (show-module-if 'make-vgen-module)
 
@@ -198,35 +198,35 @@
        (always ((posedge clk))
          (case status
            (#b000
-             (<=# read_req_ready_r 1)
-             (<=# status #b001))
+             (<- read_req_ready_r 1)
+             (<- status #b001))
            (#b001
              (if read_req_valid_w
                (progn
-                 (<=# read_req_ready_r 0)
-                 (<=# status #b011))))
+                 (<- read_req_ready_r 0)
+                 (<- status #b011))))
            (#b011
-             (<=# read_data_enable_r 1)
-             (<=# read_data_r (d 64 #x1234567890abcdef))
-             (<=# count 31)
-             (<=# status #b010))
+             (<- read_data_enable_r 1)
+             (<- read_data_r (d 64 #x1234567890abcdef))
+             (<- count 31)
+             (<- status #b010))
            (#b010
-             (<=# read_data_r (+ read_data_r 1))
+             (<- read_data_r (+ read_data_r 1))
              (if (== count 0)
                (progn
-                 (<=# read_data_enable_r 0)
-                 (<=# read_data_r (cat* 64 (cat (b 1 x))))
-                 (<=# status #b110)))
-             (<=# count (- count 1)))
+                 (<- read_data_enable_r 0)
+                 (<- read_data_r (cat* 64 (cat (b 1 x))))
+                 (<- status #b110)))
+             (<- count (- count 1)))
            (#b110
-             (<=# count 31)
-             (<=# status #b111))
+             (<- count 31)
+             (<- status #b111))
            (#b111
              (if (== count 0)
-               (<=# status #b101))
-             (<=# count (- count 1)))
+               (<- status #b101))
+             (<- count (- count 1)))
            (#b101
-             (<=# status #b000))))
+             (<- status #b000))))
            
 
     (reg= (32 mc) 0)

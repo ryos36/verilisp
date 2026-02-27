@@ -46,9 +46,9 @@
 			(2 `(v_assign rd_data_w data_rr)))
 
         (v_always (,(if (eq latency 0) 'addr '(posedge clk)))
-            ,(if (eq latency 2) `(v_<=# data_rr data_r))
+            ,(if (eq latency 2) `(v_<- data_rr data_r))
 
-            (,(if (= latency 0) 'v_=  'v_<=#) data_r
+            (,(if (= latency 0) 'v_=  'v_<-) data_r
                 ,(if (equal orientation :byte)
                     `(v_cat
                         ,@(foreach i (range (/ word-size 8))
@@ -97,7 +97,7 @@
                                     )
                                 )
                             )
-                            `(v_<=#
+                            `(v_<-
                                 (v_ref data addr)
                                 wr_data
                             )
