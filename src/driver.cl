@@ -13,7 +13,7 @@
   "Return T if an AST node with this tag needs to be inside a module.
    In the old pipeline, check-in-module is called by declarations, system tasks, etc.
    but NOT by v_assign, v_comment, v_function, v_task."
-  (not (member tag '(:assign :comment :function :task))))
+  (not (member tag '(:assign :function :task))))
 
 (defun process-bare-stmts (stmts)
   "Process bare statements: group module-needing stmts into _$_ modules,
@@ -36,18 +36,26 @@
       (push (make-dollar-module (nreverse module-stmts)) result))
     (nreverse result)))
 
+(defun flatten-progn (node)
+  "Recursively flatten nested :progn nodes into a flat list of children."
+  (if (and (consp node) (eq (car node) :progn))
+      (mapcan #'flatten-progn (cdr node))
+      (list node)))
+
 (defun wrap-top-level (progn-node)
   "Post-process a :progn node: extract directives, wrap bare stmts in _$_ module.
    Input: (:progn node1 node2 ...)
    Output: list of top-level AST nodes"
   (let ((directives nil)
         (top-forms nil)
-        (bare-stmts nil))
-    (dolist (node (cdr progn-node))  ; skip :progn tag
+        (bare-stmts nil)
+        ;; Flatten nested :progn nodes first
+        (flat-nodes (flatten-progn progn-node)))
+    (dolist (node flat-nodes)
       (when (and node (consp node))
         (let ((tag (car node)))
           (cond
-            ((member tag '(:include :define :timescale :comment))
+            ((member tag '(:include :define :timescale))
              (push node directives))
             ((member tag '(:module :primitive))
              ;; Flush bare stmts before module
@@ -71,13 +79,16 @@
 (defun translate-code-ast (code output-stream)
   "Translate verilisp CODE string via AST pipeline:
    mangle → eval (AST collect) → post-process → emit."
-  (let* ((mangled (mangle-code code))
-         (wrapped (format nil "(v_progn ~a)" mangled))
+  (let* ((lib-path (concatenate 'string *verilisp-dir* "lib/"))
+         (mangled (mangle-code code))
+         (wrapped (format nil "(progn (add-verilisp-path \"~a\") (v_progn ~a))"
+                          lib-path mangled))
          (ast-form (with-input-from-string (s wrapped)
                      (read s)))
          ;; Eval to collect AST
          (raw-ast (let ((*in-module* nil)
-                        (*current-module-contents* nil))
+                        (*current-module-contents* nil)
+                        (*ast-toplevel-nodes* (list :sentinel)))
                     (eval ast-form)))
          ;; Post-process: extract directives, wrap bare stmts
          (top-nodes (wrap-top-level raw-ast)))
@@ -92,7 +103,8 @@
 
 (defparameter *new-test-names*
   '("declarators" "case" "for_fromto" "function_task"
-    "primitive" "primitives" "module" "assign" "dollars_backticks"))
+    "primitive" "primitives" "module" "assign" "dollars_backticks"
+    "expand" "multiplier" "use"))
 
 (defun run-new-tests ()
   "Run Phase 1a tests using the AST pipeline.

@@ -61,6 +61,8 @@
       (:wand        (emit-simple-decl "wand" node))
       (:wor         (emit-simple-decl "wor" node))
       (:trireg      (emit-simple-decl "trireg" node))
+      (:supply0     (emit-simple-decl "supply0" node))
+      (:supply1     (emit-simple-decl "supply1" node))
       (:reg         (emit-reg-decl node))
       (:reg=        (emit-reg=-decl node))
       (:integer     (emit-integer-decl node))

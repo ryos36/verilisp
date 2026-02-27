@@ -5,22 +5,60 @@
 ;;;; Load order: __verilisp__.cl → ast.cl → emit.cl → core.cl → driver.cl
 
 ;;; ============================================================
+;;; Accumulator for eval-created AST nodes
+;;; ============================================================
+
+(defvar *ast-toplevel-nodes* nil
+  "Accumulator: v_module/v_primitive push AST nodes here when called
+   via eval (e.g. from library factory macros like make-ff).
+   This allows ast-eval to recover nodes that would otherwise be lost
+   when the calling form returns nil.")
+
+;;; ============================================================
 ;;; Helpers
 ;;; ============================================================
 
 (defun ast-eval (form)
   "Evaluate FORM and return an AST value.
    - Atoms (symbols/numbers) are returned as-is.
-   - Lists are evaluated. If the result is non-nil, return it.
-   - If eval returns nil, capture any stdout output as a :raw-text node."
+   - Lists are evaluated.
+   - If new AST nodes were accumulated during eval (e.g. from library
+     factory macros called via eval), recover them — regardless of
+     whether eval also returned a value.
+   - If eval returns a non-nil AST result and no nodes accumulated,
+     return that result.
+   - Otherwise capture any stdout output as a :raw-text node."
   (if (atom form)
       form
-      (let* ((stdout-capture (make-string-output-stream))
+      (let* ((acc-before (length *ast-toplevel-nodes*))
+             (stdout-capture (make-string-output-stream))
              (result (let ((*standard-output* stdout-capture))
                        (eval form)))
-             (captured (get-output-stream-string stdout-capture)))
+             (captured (get-output-stream-string stdout-capture))
+             (acc-new (- (length *ast-toplevel-nodes*) acc-before)))
         (cond
+          ;; Accumulated nodes exist → recover them (+ result if AST node)
+          ((> acc-new 0)
+           (let ((nodes (nreverse
+                          (subseq *ast-toplevel-nodes* 0 acc-new))))
+             ;; Remove recovered nodes from accumulator
+             (setq *ast-toplevel-nodes*
+                   (nthcdr acc-new *ast-toplevel-nodes*))
+             ;; Filter out any node that is eq to result (avoid duplication
+             ;; when v_module both pushes and returns the same node)
+             (when result
+               (setq nodes (remove result nodes :test #'eq)))
+             ;; Include result if it's an AST node
+             (when (and result (consp result) (keywordp (car result)))
+               (setq nodes (append nodes (list result))))
+             (if (= (length nodes) 1)
+                 (car nodes)
+                 (if nodes
+                     (cons :progn nodes)
+                     nil))))
+          ;; eval returned a proper AST node, no accumulated nodes
           (result result)
+          ;; stdout capture
           ((> (length captured) 0) (list :raw-text captured))
           (t nil)))))
 
@@ -362,8 +400,11 @@
                                            (apply #'+ (cdr k-v))))))))
          ;; Side effect: register module as instantiable macro
          (make-named-module-ast ',name ',name)
-         ;; Return the AST node
-         (list* :module ',name params stmts)))))
+         ;; Side effect: push to accumulator (for eval-created modules)
+         (let ((node (list* :module ',name params stmts)))
+           (when *ast-toplevel-nodes*
+             (push node *ast-toplevel-nodes*))
+           node)))))
 
 ;;; v_defmodule — alias
 (defmacro v_defmodule (&rest args)
@@ -378,7 +419,11 @@
              (params (ast-convert-params ',parameters)))
          ;; Side effect: register
          (make-named-module-ast ',name ',name)
-         (list* :primitive ',name params stmts)))))
+         ;; Side effect: push to accumulator (for eval-created primitives)
+         (let ((node (list* :primitive ',name params stmts)))
+           (when *ast-toplevel-nodes*
+             (push node *ast-toplevel-nodes*))
+           node)))))
 
 ;;; v_table
 (defun unmangle-table-sym (sym)
@@ -504,3 +549,69 @@
     (eval
       `(defmacro ,(mangle name) (&rest names)
          `(list ,',kw ,@(mapcar (lambda (n) `',n) names))))))
+
+;;; ============================================================
+;;; expand / expandf — AST version of gate expansion
+;;; ============================================================
+
+(defun expandf (&rest args)
+  (eval `(expand ,@args)))
+
+(defmacro expand (&rest args)
+  "Expand gate expressions into AST nodes.
+   (expand out (or (and a b) (not c))) — assigns out via gate primitives.
+   Recurses into sub-expressions that reference known modules/gates."
+  (let ((expr (car (last args)))
+        (wires nil)
+        (module-args nil)
+        (orig-comment-expand *comment-expand*))
+    ;; Comment if first call — set flag at macro-expansion time
+    (when *comment-expand*
+      (setq *comment-expand* nil))
+    ;; Process each argument of the gate expression
+    (foreach unnamed-arg (cdr expr)
+      (if (or (atom unnamed-arg)
+              (not (or (contains all-modules (car unnamed-arg))
+                       (contains all-modules (mangle (car unnamed-arg))))))
+          ;; Atom or non-module expression: pass through
+          (setq module-args (append module-args (list (list unnamed-arg))))
+          ;; Module/gate sub-expression: create intermediate wire
+          (let ((throwaway (gen-expand-variable)))
+            (setq wires (append wires (list throwaway)))
+            (setq module-args
+              (append module-args
+                (list (list throwaway
+                           (if (contains all-modules (car unnamed-arg))
+                               unnamed-arg
+                               (cons (mangle (car unnamed-arg))
+                                     (cdr unnamed-arg))))))))))
+    ;; Build the collected results
+    (let ((collected nil))
+      ;; Add comment if first call
+      (when orig-comment-expand
+        (push `(v_comment ,@args) collected))
+      ;; Wire declarations
+      (when wires
+        (push `(v_wire ,@wires) collected))
+      ;; Main gate instantiation
+      (let ((gate (if (contains all-modules (mangle (car expr)))
+                      (mangle (car expr))
+                      (car expr))))
+        (push `(,gate
+                 ,@(slice args (length (cdr args)))
+                 ,@(foreach module-arg module-args
+                     (car module-arg)))
+              collected))
+      ;; Recurse into sub-expressions
+      (foreach inner-expr module-args
+        (when (cdr inner-expr)
+          (push `(expandf ',(car inner-expr) ',(cadr inner-expr)) collected)))
+      ;; Restore comment flag at macro-expansion time
+      (when orig-comment-expand
+        (setq *comment-expand* orig-comment-expand))
+      ;; Return a progn that evaluates all collected forms at runtime.
+      ;; Bind *comment-expand* to nil so recursive expandf calls don't
+      ;; emit comments (matches old expand behavior).
+      `(let ((*comment-expand* nil))
+         (list :progn ,@(mapcar (lambda (form) `(ast-eval ',form))
+                                (nreverse collected)))))))
